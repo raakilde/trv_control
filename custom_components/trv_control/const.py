@@ -6,9 +6,12 @@ DOMAIN = "trv_control"
 CONF_ROOMS = "rooms"
 CONF_ROOM_NAME = "room_name"
 CONF_TEMP_SENSOR = "temp_sensor"
+CONF_WINDOW_SENSOR = "window_sensor"
+CONF_TRVS = "trvs"
+
+# TRV Configuration (each TRV in a room)
 CONF_TRV = "trv"
 CONF_RETURN_TEMP = "return_temp"
-CONF_WINDOW_SENSOR = "window_sensor"
 CONF_RETURN_TEMP_CLOSE = "return_temp_close"
 CONF_RETURN_TEMP_OPEN = "return_temp_open"
 CONF_MAX_VALVE_POSITION = "max_valve_position"

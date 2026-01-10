@@ -7,7 +7,7 @@
       }
     },
     "abort": {
-      "single_instance_allowed": "Only a single instance is allowed.",
+      "single_instance_allowed": "TRV Control is already configured. To add rooms, go to Settings → Devices & Services, find TRV Control, and click Configure.",
       "no_rooms": "No rooms configured yet.",
       "rooms_listed": "Configured rooms:\n{rooms}"
     }
@@ -15,30 +15,66 @@
   "options": {
     "step": {
       "init": {
+        "title": "TRV Control Options",
+        "description": "Manage rooms and configuration",
         "menu_options": {
           "add_room": "Add Room",
+          "manage_room": "Manage Room TRVs",
           "remove_room": "Remove Room",
           "list_rooms": "List Rooms"
         }
       },
       "add_room": {
         "title": "Add Room",
-        "description": "Configure a room with temperature sensor, TRV, and return temperature sensor from Zigbee2MQTT",
+        "description": "Create a new room. You can add TRVs to it afterwards.",
         "data": {
           "room_name": "Room Name",
           "temp_sensor": "Temperature Sensor (Z2M)",
+          "window_sensor": "Window Sensor (Optional)"
+        },
+        "data_description": {
+          "temp_sensor": "Shared temperature sensor for all TRVs in this room",
+          "window_sensor": "Binary sensor that detects open window (heating stops when open)"
+        }
+      },
+      "manage_room": {
+        "title": "Select Room to Manage",
+        "description": "Choose which room's TRVs to manage",
+        "data": {
+          "room": "Room"
+        }
+      },
+      "room_options": {
+        "title": "Manage Room TRVs",
+        "description": "Add or remove TRVs for {room_name}",
+        "menu_options": {
+          "add_trv": "Add TRV",
+          "remove_trv": "Remove TRV",
+          "list_trvs": "List TRVs"
+        }
+      },
+      "add_trv": {
+        "title": "Add TRV to {room_name}",
+        "description": "Each TRV has its own return temperature sensor",
+        "data": {
           "trv": "TRV Device (Z2M)",
           "return_temp": "Return Temperature Sensor (Z2M)",
-          "window_sensor": "Window Sensor (Optional)",
           "return_temp_close": "Return Temp Close Valve (°C)",
           "return_temp_open": "Return Temp Open Valve (°C)",
           "max_valve_position": "Maximum Valve Position (%)"
         },
         "data_description": {
-          "window_sensor": "Binary sensor that detects open window (heating stops when open)",
+          "return_temp": "Temperature sensor on this TRV's radiator return pipe",
           "return_temp_close": "When return temperature reaches this, valve closes",
           "return_temp_open": "When return temperature drops to this, valve opens",
           "max_valve_position": "Maximum valve opening percentage (0-100%)"
+        }
+      },
+      "remove_trv": {
+        "title": "Remove TRV from {room_name}",
+        "description": "Select a TRV to remove",
+        "data": {
+          "trv": "TRV to remove"
         }
       },
       "remove_room": {
@@ -54,7 +90,10 @@
       "unknown": "Unexpected error"
     },
     "abort": {
-      "no_rooms": "No rooms configured yet. Add a room first."
+      "no_rooms": "No rooms configured yet. Add a room first.",
+      "no_trvs": "No TRVs in this room yet. Add a TRV first.",
+      "trvs_listed": "TRVs in {room_name}:\n{trvs}",
+      "rooms_listed": "Configured rooms:\n{rooms}"
     }
   }
 }

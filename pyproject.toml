@@ -1,0 +1,30 @@
+[project]
+name = "trv-control"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "pytest>=7.0.0",
+    "pytest-homeassistant-custom-component>=0.13.0",
+    "pytest-cov>=4.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --strict-markers"
+
+[tool.coverage.run]
+source = ["custom_components.trv_control"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

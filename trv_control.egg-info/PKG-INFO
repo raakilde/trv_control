@@ -1,3 +1,14 @@
+Metadata-Version: 2.4
+Name: trv-control
+Version: 0.1.0
+Summary: Advanced TRV Control for Home Assistant with Zigbee2MQTT
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Provides-Extra: test
+Requires-Dist: pytest>=7.0.0; extra == "test"
+Requires-Dist: pytest-homeassistant-custom-component>=0.13.0; extra == "test"
+Requires-Dist: pytest-cov>=4.0.0; extra == "test"
+
 # TRV Control - Home Assistant Custom Component
 
 A custom component for controlling Thermostatic Radiator Valves with Zigbee2MQTT in Home Assistant. Designed specifically for managing multiple rooms with external temperature sensors and return temperature monitoring.
