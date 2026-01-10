@@ -1,0 +1,5 @@
+{
+  "name": "TRV Control",
+  "render_readme": true,
+  "domains": ["climate"]
+}
