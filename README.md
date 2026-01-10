@@ -1,6 +1,36 @@
 # TRV Control - Home Assistant Custom Component
 
-A custom component for controlling Thermostatic Radiator Valves in Home Assistant.
+A custom component for controlling Thermostatic Radiator Valves with Zigbee2MQTT in Home Assistant. Designed specifically for managing multiple rooms with external temperature sensors and return temperature monitoring.
+
+## Features
+
+### Room-Based Control
+- **Multiple Rooms**: Add unlimited rooms under a single integration instance
+- **Per-Room Configuration**: Each room has its own TRV, temperature sensor, and return temp sensor
+- **Individual Settings**: Customize valve position limits and temperature thresholds per room
+
+### Temperature Management
+- **External Temperature Control**: Uses Zigbee2MQTT temperature sensors instead of TRV internal sensors
+- **Automatic Refresh**: Sends target temperature to TRV every 5 minutes (prevents Sonoff TRV from defaulting to internal sensor)
+- **Return Temperature Monitoring**: Tracks radiator return temperature for system efficiency
+- **Automatic Valve Control**: Closes valve when return temp ≥ 32°C, opens when ≤ 30°C (configurable)
+
+### Window Detection
+- **Automatic Shutoff**: Monitors window sensors and turns off heating when window opens
+- **Smart Resume**: Automatically restores previous heating mode when window closes
+- **Energy Savings**: Prevents wasted heating with open windows
+
+### Valve Control
+- **Automatic Position Control**: Manages valve opening based on return temperature
+- **Manual Valve Position**: Override with manual control (0-100%)
+- **Configurable Max Position**: Limit maximum valve opening per room
+- **Multi-Method Support**: Uses both number entity and MQTT commands for broad TRV compatibility
+- **Status Tracking**: View valve control state and position in entity attributes
+
+### Smart Integration
+- **Zigbee2MQTT Support**: Designed for Z2M climate and sensor entities
+- **Real-time Updates**: Monitors all sensors and updates immediately
+- **Service Calls**: Control valves and thresholds via Home Assistant services
 
 ## Installation
 
@@ -15,18 +45,171 @@ A custom component for controlling Thermostatic Radiator Valves in Home Assistan
 
 ## Configuration
 
+### Initial Setup
 1. Go to Settings → Devices & Services
 2. Click "+ Add Integration"
 3. Search for "TRV Control"
-4. Follow the configuration steps
+4. Click to create the integration (no initial configuration needed)
 
-## Features
+### Adding Rooms
+1. Click "Configure" on the TRV Control integration
+2. Select "Add Room"
+3. Configure the room:
+   - **Room Name**: e.g., "Living Room", "Bedroom"
+   - **Temperature Sensor**: Z2M temperature sensor entity
+   - **TRV Device**: Z2M climate entity (e.g., Sonoff TRVZB)
+   - **Return Temperature Sensor**: Z2M sensor on radiator return pipe
+   - **Window Sensor** (optional): Binary sensor for window open/close detection
+   - **Return Temp Close** (default: 32°C): Temperature to trigger valve closure
+   - **Return Temp Open** (default: 30°C): Temperature to reopen valve
+   - **Max Valve Position** (default: 100%): Maximum valve opening percentage
 
-- Climate entity for temperature control
-- Support for heating/off modes
-- Configurable temperature range
-- UI-based configuration
+### Managing Rooms
+- **Add Room**: Add additional rooms
+- **Remove Room**: Delete a room configuration
+- **List Rooms**: View all configured rooms
+
+## Usage
+
+### Entity Attributes
+
+Each room creates a climate entity with these attributes:
+
+```yaml
+# Example: climate.living_room_trv_control
+current_temperature: 21.5          # From temperature sensor
+target_temperature: 22.0           # Your setpoint
+return_temperature: 28.3           # From return temp sensor
+current_valve_position: 75         # Current valve opening %
+max_valve_position: 100            # Configured max
+return_temp_close_threshold: 32.0  # Auto-close valve at this temp
+return_temp_open_threshold: 30.0   # Auto-open valve at this temp
+valve_control_active: false        # True when valve auto-closed
+window_sensor: binary_sensor.window # Window sensor entity (if configured)
+window_open: false                 # Window state
+temp_sensor: sensor.living_room_temp
+trv: climate.living_room_trv
+return_temp_sensor: sensor.living_room_return
+```
+
+### Services
+
+#### Set Valve Position
+Manually control the valve opening percentage:
+
+```yaml
+service: trv_control.set_valve_position
+target:
+  entity_id: climate.living_room_trv_control
+data:
+  position: 50  # 0-100%
+```
+
+#### Set Return Temperature Thresholds
+Adjust the monitoring thresholds:
+
+```yaml
+service: trv_control.set_return_thresholds
+target:
+  entity_id: climate.living_room_trv_control
+data:
+  close_temp: 35.0  # °C
+  open_temp: 32.0   # °C
+```
+
+## How It Works
+
+### Temperature Control
+1. Component reads external temperature sensor
+2. Sends target temperature to TRV every 5 minutes
+3. TRV uses external temperature instead of internal sensor
+4. Prevents temperature drift and inaccurate readings
+
+### Return Temperature Monitoring & Valve Control
+1. Monitors return pipe temperature continuously
+2. **Auto-close**: When return temp ≥ close threshold (default 32°C)
+   - Sets valve position to 0%
+   - Sets `valve_control_active` to true
+   - Prevents overheating and balances system
+3. **Auto-open**: When return temp ≤ open threshold (default 30°C)
+   - Restores valve to max position
+   - Sets `valve_control_active` to false
+   - Resumes normal heating
+4. Uses both number entity and MQTT methods for broad compatibility
+
+### Window Detection
+1. Monitors configured window sensor continuously
+2. **Window opens**: 
+   - Saves current HVAC mode
+   - Turns heating off immediately
+   - Prevents operation while window is open
+3. **Window closes**:
+   - Restores previous HVAC mode
+   - Resumes normal operation
+4. Manual turn-on blocked while window remains open
+
+## Compatible Devices
+
+### Tested TRVs (Zigbee2MQTT)
+- Sonoff TRVZB
+- Other Z2M compatible TRVs
+
+### Temperature Sensors
+- Any Z2M temperature sensor
+- Aqara Temperature/Humidity sensors
+- Sonoff SNZB-02 Temperature sensors
+- Other Zigbee temperature sensors
+
+## Troubleshooting
+
+### TRV not responding to temperature changes
+- Verify Z2M is working and TRV is online
+- Check the 5-minute refresh is working (see debug logs)
+- Ensure TRV entity ID is correct
+
+### Temperature sensor not updating
+- Check Z2M integration is working
+- Verify sensor entity ID in configuration
+- Check sensor battery level
+
+### Valve position not changing
+- Ensure your TRV supports position commands
+- Check MQTT topic is correct for your device
+- Review debug logs for "Could not set valve position" messages
+- Try using the manual service call to test
+
+### Window detection not working
+- Verify window sensor entity ID is correct
+- Check sensor reports "on"/"open" when window is open
+- Review entity attributes to see `window_open` status
+- Check logs for "Window opened/closed" messages
+
+### Heating won't turn on
+- Check if window is open (`window_open: true` in attributes)
+- Check if return temp control is active (`valve_control_active: true`)
+- Verify return temperature is below open threshold
+- Close window and wait for sensor to update
 
 ## Development
 
-This component follows the Home Assistant integration structure and best practices.
+This component follows Home Assistant integration structure and best practices.
+
+### Structure
+```
+custom_components/trv_control/
+├── __init__.py          # Integration setup and services
+├── climate.py           # Climate entity platform
+├── config_flow.py       # UI configuration flow
+├── const.py            # Constants and defaults
+├── manifest.json       # Integration metadata
+├── services.yaml       # Service definitions
+└── strings.json        # UI translations
+```
+
+## License
+
+MIT License
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.

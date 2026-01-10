@@ -3,20 +3,58 @@
     "step": {
       "user": {
         "title": "Set up TRV Control",
-        "description": "Configure your TRV Control integration",
+        "description": "This will create the TRV Control integration. You can add rooms after setup."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only a single instance is allowed.",
+      "no_rooms": "No rooms configured yet.",
+      "rooms_listed": "Configured rooms:\n{rooms}"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "menu_options": {
+          "add_room": "Add Room",
+          "remove_room": "Remove Room",
+          "list_rooms": "List Rooms"
+        }
+      },
+      "add_room": {
+        "title": "Add Room",
+        "description": "Configure a room with temperature sensor, TRV, and return temperature sensor from Zigbee2MQTT",
         "data": {
-          "device_id": "Device ID",
-          "name": "Name"
+          "room_name": "Room Name",
+          "temp_sensor": "Temperature Sensor (Z2M)",
+          "trv": "TRV Device (Z2M)",
+          "return_temp": "Return Temperature Sensor (Z2M)",
+          "window_sensor": "Window Sensor (Optional)",
+          "return_temp_close": "Return Temp Close Valve (°C)",
+          "return_temp_open": "Return Temp Open Valve (°C)",
+          "max_valve_position": "Maximum Valve Position (%)"
+        },
+        "data_description": {
+          "window_sensor": "Binary sensor that detects open window (heating stops when open)",
+          "return_temp_close": "When return temperature reaches this, valve closes",
+          "return_temp_open": "When return temperature drops to this, valve opens",
+          "max_valve_position": "Maximum valve opening percentage (0-100%)"
+        }
+      },
+      "remove_room": {
+        "title": "Remove Room",
+        "description": "Select a room to remove",
+        "data": {
+          "room": "Room to remove"
         }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect",
-      "invalid_auth": "Invalid authentication",
+      "room_exists": "A room with this name already exists",
       "unknown": "Unexpected error"
     },
     "abort": {
-      "already_configured": "Device is already configured"
+      "no_rooms": "No rooms configured yet. Add a room first."
     }
   }
 }
