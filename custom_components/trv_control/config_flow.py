@@ -40,7 +40,7 @@ def get_room_schema() -> vol.Schema:
                 selector.EntitySelectorConfig(domain="sensor")
             ),
             vol.Optional(CONF_WINDOW_SENSOR): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="binary_sensor", device_class="window")
+                selector.EntitySelectorConfig(domain="binary_sensor", device_class=["window", "door", "opening"])
             ),
         }
     )
@@ -117,7 +117,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Get rooms from options or data."""
         return self.config_entry.options.get(CONF_ROOMS, self.config_entry.data.get(CONF_ROOMS, []))
     
-    def _save_rooms(self, rooms: list) -> None:
+    async def _save_rooms(self, rooms: list) -> None:
         """Save rooms to options."""
         self.hass.config_entries.async_update_entry(
             self.config_entry,
@@ -157,7 +157,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     }
                     rooms.append(room_config)
                     
-                    self._save_rooms(rooms)
+                    await self._save_rooms(rooms)
                     
                     await self.hass.config_entries.async_reload(self.config_entry.entry_id)
                     
@@ -233,7 +233,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         room[CONF_TRVS].append(trv_config)
                         break
                 
-                self._save_rooms(rooms)
+                await self._save_rooms(rooms)
                 
                 await self.hass.config_entries.async_reload(self.config_entry.entry_id)
                 
@@ -272,7 +272,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 trv for trv in selected_room_config[CONF_TRVS] if trv[CONF_TRV] != trv_id
             ]
             
-            self._save_rooms(rooms)
+            await self._save_rooms(rooms)
             
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
             
@@ -326,7 +326,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             room_name = user_input["room"]
             rooms = [room for room in rooms if room[CONF_ROOM_NAME] != room_name]
             
-            self._save_rooms(rooms)
+            await self._save_rooms(rooms)
             
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
             

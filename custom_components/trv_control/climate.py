@@ -259,7 +259,7 @@ class TRVClimate(ClimateEntity):
             self._unsub_temp_update()
 
     async def _async_control_valve(self, trv_config: dict[str, Any]) -> None:
-        """Control valve based on return temperature for a specific TRV."""
+        """Control valve based on room temperature and return temperature for a specific TRV."""
         trv_id = trv_config[CONF_TRV]
         trv_state = self._trv_states[trv_id]
         return_temp = trv_state["return_temp"]
@@ -267,8 +267,8 @@ class TRVClimate(ClimateEntity):
         if return_temp is None:
             return
         
-        # Don't control if window is open
-        if self._window_open:
+        # Don't control if window is open or HVAC is off
+        if self._window_open or self._attr_hvac_mode == HVACMode.OFF:
             return
         
         # Get thresholds for this TRV
@@ -276,62 +276,142 @@ class TRVClimate(ClimateEntity):
         open_threshold = trv_config.get(CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN)
         max_position = trv_config.get(CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION)
         
-        # Close valve if return temp is too high
-        if return_temp >= close_threshold:
-            if not trv_state["valve_control_active"]:
-                _LOGGER.info(
-                    "Return temp %.1f >= %.1f, closing valve for TRV %s",
-                    return_temp,
-                    close_threshold,
-                    trv_id,
-                )
-                await self._async_set_valve_position(trv_id, 0)
-                trv_state["valve_control_active"] = True
+        # Primary control: Room temperature vs target temperature
+        room_temp = self._attr_current_temperature
+        target_temp = self._attr_target_temperature
         
-        # Open valve when temp drops below open threshold
-        elif return_temp <= open_threshold:
-            if trv_state["valve_control_active"]:
-                _LOGGER.info(
-                    "Return temp %.1f <= %.1f, opening valve for TRV %s",
-                    return_temp,
-                    open_threshold,
-                    trv_id,
-                )
-                await self._async_set_valve_position(trv_id, max_position)
-                trv_state["valve_control_active"] = False
+        if room_temp is not None and target_temp is not None:
+            # Room has reached or exceeded target - close valve
+            if room_temp >= target_temp:
+                if not trv_state["valve_control_active"]:
+                    _LOGGER.info(
+                        "Room temp %.1f°C >= target %.1f°C, closing valve for TRV %s",
+                        room_temp,
+                        target_temp,
+                        trv_id,
+                    )
+                    await self._async_set_valve_position(trv_id, 0)
+                    trv_state["valve_control_active"] = True
+            
+            # Room is below target - check return temp before opening
+            elif room_temp < target_temp:
+                # Safety check: only open if return temp is not too high
+                if return_temp >= close_threshold:
+                    _LOGGER.info(
+                        "Room temp %.1f°C < target %.1f°C, but return temp %.1f°C >= %.1f°C - keeping valve closed for %s",
+                        room_temp,
+                        target_temp,
+                        return_temp,
+                        close_threshold,
+                        trv_id,
+                    )
+                    if not trv_state["valve_control_active"]:
+                        await self._async_set_valve_position(trv_id, 0)
+                        trv_state["valve_control_active"] = True
+                
+                # Open valve if return temp is acceptable
+                elif return_temp <= open_threshold:
+                    # Always ensure valve is at max position when return temp is low
+                    if trv_state["valve_position"] != max_position:
+                        _LOGGER.info(
+                            "Room temp %.1f°C < target %.1f°C and return temp %.1f°C <= %.1f°C - opening valve to %d%% for %s",
+                            room_temp,
+                            target_temp,
+                            return_temp,
+                            open_threshold,
+                            max_position,
+                            trv_id,
+                        )
+                        await self._async_set_valve_position(trv_id, max_position)
+                        trv_state["valve_control_active"] = False
+        
+        else:
+            # Fallback to return temp only if room temp not available
+            # Close valve if return temp is too high
+            if return_temp >= close_threshold:
+                if not trv_state["valve_control_active"]:
+                    _LOGGER.info(
+                        "Return temp %.1f >= %.1f, closing valve for TRV %s (room temp not available)",
+                        return_temp,
+                        close_threshold,
+                        trv_id,
+                    )
+                    await self._async_set_valve_position(trv_id, 0)
+                    trv_state["valve_control_active"] = True
+            
+            # Open valve when temp drops below open threshold
+            elif return_temp <= open_threshold:
+                # Always ensure valve is at max position when return temp is low
+                if trv_state["valve_position"] != max_position:
+                    _LOGGER.info(
+                        "Return temp %.1f <= %.1f, opening valve to %d%% for TRV %s (room temp not available)",
+                        return_temp,
+                        open_threshold,
+                        max_position,
+                        trv_id,
+                    )
+                    await self._async_set_valve_position(trv_id, max_position)
+                    trv_state["valve_control_active"] = False
 
     async def _async_set_valve_position(self, trv_id: str, position: int) -> None:
         """Set the valve position for a specific TRV."""
         self._trv_states[trv_id]["valve_position"] = position
+        device_name = trv_id.replace("climate.", "")
         
-        # Try to set position attribute on TRV (Z2M specific)
-        try:
-            await self.hass.services.async_call(
-                "number",
-                "set_value",
-                {
-                    "entity_id": f"{trv_id.replace('climate.', 'number.')}_position",
-                    "value": position,
-                },
-                blocking=False,
-            )
-        except Exception as e:
-            _LOGGER.debug("Could not set valve position via number entity for %s: %s", trv_id, e)
+        _LOGGER.info("Setting valve position to %d%% for %s", position, trv_id)
         
-        # Alternative: Try MQTT for Z2M devices
-        try:
-            device_name = trv_id.replace("climate.", "").replace("_", " ")
-            await self.hass.services.async_call(
-                "mqtt",
-                "publish",
-                {
-                    "topic": f"zigbee2mqtt/{device_name}/set",
-                    "payload": f'{{"position": {position}}}',
-                },
-                blocking=False,
-            )
-        except Exception as e:
-            _LOGGER.debug("Could not set valve position via MQTT for %s: %s", trv_id, e)
+        # Try to set position via number entity first
+        # Possible entity names for valve opening degree
+        number_patterns = [
+            f"number.{device_name}_valve_opening_degree",
+            f"number.{device_name}_position",
+            f"number.{device_name}_valve_position",
+        ]
+        
+        position_set = False
+        for number_entity in number_patterns:
+            if self.hass.states.get(number_entity):
+                try:
+                    _LOGGER.info("Setting valve via entity %s to %d%%", number_entity, position)
+                    await self.hass.services.async_call(
+                        "number",
+                        "set_value",
+                        {
+                            "entity_id": number_entity,
+                            "value": position,
+                        },
+                        blocking=False,
+                    )
+                    position_set = True
+                    break
+                except Exception as e:
+                    _LOGGER.warning("Could not set valve position via %s: %s", number_entity, e)
+        
+        # Fallback to MQTT if no entity found
+        if not position_set:
+            try:
+                # Sonoff uses "valve_opening_degree" attribute
+                topic = f"zigbee2mqtt/{device_name}/set"
+                payload = f'{{"valve_opening_degree": {position}}}'
+                
+                _LOGGER.info(
+                    "Setting valve via MQTT for %s: topic=%s, payload=%s",
+                    trv_id,
+                    topic,
+                    payload,
+                )
+                
+                await self.hass.services.async_call(
+                    "mqtt",
+                    "publish",
+                    {
+                        "topic": topic,
+                        "payload": payload,
+                    },
+                    blocking=False,
+                )
+            except Exception as e:
+                _LOGGER.error("Could not set valve position via MQTT for %s: %s", trv_id, e)
 
     async def _async_send_room_temperature_to_all_trvs(self, temperature: float) -> None:
         """Send current room temperature from shared sensor to all TRVs."""
@@ -344,56 +424,112 @@ class TRVClimate(ClimateEntity):
         device_name = trv_id.replace("climate.", "")
         topic = f"zigbee2mqtt/{device_name}/set"
         
-        # Sonoff TRVZB requires specific sequence:
-        # 1. Set temperature_sensor_select to "external"
-        # 2. Send external_temperature_input value
+        # Sonoff TRVZB exposes temperature sensor selection as a select entity
+        # Try multiple possible entity name patterns
+        
+        # Possible select entity names for temperature sensor mode
+        select_patterns = [
+            f"select.{device_name}_temperature_sensor",
+            f"select.{device_name}_sensor",
+            f"select.{device_name}_temperature_sensor_select",
+        ]
+        
+        # Possible number entity names for external temperature
+        number_patterns = [
+            f"number.{device_name}_external_temperature",
+            f"number.{device_name}_external_temperature_input",
+            f"number.{device_name}_ext_temperature",
+        ]
         
         try:
             # Step 1: Set to external sensor mode
-            sensor_mode_payload = '{"temperature_sensor_select": "external"}'
+            sensor_set = False
+            for select_entity in select_patterns:
+                if self.hass.states.get(select_entity):
+                    _LOGGER.info(
+                        "Found select entity: %s, setting to 'external'",
+                        select_entity,
+                    )
+                    
+                    await self.hass.services.async_call(
+                        "select",
+                        "select_option",
+                        {
+                            "entity_id": select_entity,
+                            "option": "external",
+                        },
+                        blocking=True,
+                    )
+                    sensor_set = True
+                    break
             
-            _LOGGER.info(
-                "Setting external sensor mode for %s: topic=%s, payload=%s",
-                trv_id,
-                topic,
-                sensor_mode_payload,
-            )
-            
-            await self.hass.services.async_call(
-                "mqtt",
-                "publish",
-                {
-                    "topic": topic,
-                    "payload": sensor_mode_payload,
-                },
-                blocking=True,  # Wait for this to complete
-            )
+            if not sensor_set:
+                # No select entity found, use MQTT
+                _LOGGER.info(
+                    "No select entity found for %s, using MQTT: topic=%s",
+                    trv_id,
+                    topic,
+                )
+                
+                await self.hass.services.async_call(
+                    "mqtt",
+                    "publish",
+                    {
+                        "topic": topic,
+                        "payload": '{"temperature_sensor_select": "external"}',
+                    },
+                    blocking=True,
+                )
             
             # Small delay to ensure mode is set
             import asyncio
             await asyncio.sleep(0.1)
             
             # Step 2: Send external temperature value
-            temp_payload = f'{{"external_temperature_input": {temperature}}}'
+            temp_set = False
+            for number_entity in number_patterns:
+                if self.hass.states.get(number_entity):
+                    _LOGGER.info(
+                        "Found number entity: %s, setting to %.1f°C",
+                        number_entity,
+                        temperature,
+                    )
+                    
+                    await self.hass.services.async_call(
+                        "number",
+                        "set_value",
+                        {
+                            "entity_id": number_entity,
+                            "value": temperature,
+                        },
+                        blocking=False,
+                    )
+                    temp_set = True
+                    break
             
-            _LOGGER.info(
-                "Sending external temperature to %s: topic=%s, payload=%s",
-                trv_id,
-                topic,
-                temp_payload,
-            )
-            
-            await self.hass.services.async_call(
-                "mqtt",
-                "publish",
-                {
-                    "topic": topic,
-                    "payload": temp_payload,
-                },
-                blocking=False,
-            )
+            if not temp_set:
+                # No number entity found, use MQTT
+                temp_payload = f'{{"external_temperature_input": {temperature}}}'
+                
+                _LOGGER.info(
+                    "No number entity found for %s, using MQTT: topic=%s, payload=%s",
+                    trv_id,
+                    topic,
+                    temp_payload,
+                )
+                
+                await self.hass.services.async_call(
+                    "mqtt",
+                    "publish",
+                    {
+                        "topic": topic,
+                        "payload": temp_payload,
+                    },
+                    blocking=False,
+                )
+                
         except Exception as e:
-            _LOGGER.error("Failed to send room temperature to %s via MQTT: %s", trv_id, e)
+            _LOGGER.error("Failed to send room temperature to %s: %s", trv_id, e)
 
     async def _async_send_temperature_to_all_trvs(self, temperature: float) -> None:
         """Send target temperature command to all TRVs."""
@@ -450,20 +586,33 @@ class TRVClimate(ClimateEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes."""
+        # Determine overall heating status
+        heating_status = self._determine_heating_status()
+        
         attrs = {
+            "heating_status": heating_status["status"],
             "temp_sensor": self._temp_sensor_id,
             "trv_count": len(self._trvs),
+            "window_open": self._window_open,  # Always show window state
         }
         
         if self._window_sensor_id:
             attrs["window_sensor"] = self._window_sensor_id
-            attrs["window_open"] = self._window_open
         
         # Add info for each TRV
         for idx, trv in enumerate(self._trvs, 1):
             trv_id = trv[CONF_TRV]
             trv_state = self._trv_states[trv_id]
-            prefix = f"trv{idx}"
+            
+            # Use friendly name from entity state, fallback to entity_id
+            trv_entity_state = self.hass.states.get(trv_id)
+            if trv_entity_state and trv_entity_state.attributes.get("friendly_name"):
+                trv_name = trv_entity_state.attributes["friendly_name"].lower().replace(" ", "_")
+            else:
+                # Fallback to cleaned entity_id
+                trv_name = trv_id.replace("climate.", "").replace(" ", "_")
+            
+            prefix = trv_name
             
             attrs[f"{prefix}_entity"] = trv_id
             attrs[f"{prefix}_return_temp_sensor"] = trv[CONF_RETURN_TEMP]
@@ -473,8 +622,117 @@ class TRVClimate(ClimateEntity):
             attrs[f"{prefix}_close_threshold"] = trv.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE)
             attrs[f"{prefix}_open_threshold"] = trv.get(CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN)
             attrs[f"{prefix}_max_position"] = trv.get(CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION)
+            
+            # Add individual TRV status and reason
+            trv_status = self._determine_trv_status_with_reason(trv, trv_state)
+            attrs[f"{prefix}_status"] = trv_status["status"]
+            attrs[f"{prefix}_status_reason"] = trv_status["reason"]
         
         return attrs
+    
+    def _determine_heating_status(self) -> dict[str, str]:
+        """Determine the current heating status."""
+        # Check window first - it sets HVAC to OFF so needs priority
+        if self._window_open:
+            return {"status": "window_open"}
+        
+        if self._attr_hvac_mode == HVACMode.OFF:
+            return {"status": "off"}
+        
+        room_temp = self._attr_current_temperature
+        target_temp = self._attr_target_temperature
+        
+        if room_temp is None:
+            return {"status": "no_sensor"}
+        
+        if target_temp is None:
+            return {"status": "no_target"}
+        
+        # Check if room has reached target
+        if room_temp >= target_temp:
+            return {"status": "target_reached"}
+        
+        # Room needs heating - check return temp
+        any_valve_open = False
+        all_return_temp_high = True
+        
+        for trv in self._trvs:
+            trv_id = trv[CONF_TRV]
+            trv_state = self._trv_states[trv_id]
+            return_temp = trv_state["return_temp"]
+            close_threshold = trv.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE)
+            
+            if not trv_state["valve_control_active"]:
+                any_valve_open = True
+            
+            if return_temp is None or return_temp < close_threshold:
+                all_return_temp_high = False
+        
+        if any_valve_open:
+            return {"status": "heating"}
+        elif all_return_temp_high:
+            return {"status": "return_temp_high"}
+        else:
+            return {"status": "waiting"}
+    
+    def _determine_trv_status_with_reason(self, trv_config: dict[str, Any], trv_state: dict[str, Any]) -> dict[str, str]:
+        """Determine status and reason for individual TRV."""
+        room_temp = self._attr_current_temperature
+        target_temp = self._attr_target_temperature
+        return_temp = trv_state["return_temp"]
+        valve_position = trv_state["valve_position"]
+        close_threshold = trv_config.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE)
+        open_threshold = trv_config.get(CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN)
+        
+        if self._attr_hvac_mode == HVACMode.OFF:
+            return {"status": "off", "reason": "HVAC mode is OFF"}
+        
+        if self._window_open:
+            return {"status": "window_open", "reason": "Window/door is open - heating disabled"}
+        
+        if return_temp is None:
+            return {"status": "no_sensor", "reason": "Return temperature sensor not available"}
+        
+        if room_temp is not None and target_temp is not None:
+            # Room temperature based control
+            if room_temp >= target_temp:
+                return {
+                    "status": "target_reached",
+                    "reason": f"Room {room_temp}°C ≥ target {target_temp}°C - valve closed"
+                }
+            elif return_temp >= close_threshold:
+                return {
+                    "status": "return_high",
+                    "reason": f"Room {room_temp}°C < target {target_temp}°C but return {return_temp}°C ≥ {close_threshold}°C - valve closed"
+                }
+            elif return_temp <= open_threshold:
+                return {
+                    "status": "heating",
+                    "reason": f"Room {room_temp}°C < target {target_temp}°C, return {return_temp}°C ≤ {open_threshold}°C - valve {valve_position}%"
+                }
+            else:
+                return {
+                    "status": "between_thresholds",
+                    "reason": f"Return temp {return_temp}°C between {open_threshold}-{close_threshold}°C - valve {valve_position}%"
+                }
+        else:
+            # Fallback to return temp only
+            if return_temp >= close_threshold:
+                return {
+                    "status": "return_high",
+                    "reason": f"Return {return_temp}°C ≥ {close_threshold}°C - valve closed (no room temp)"
+                }
+            elif return_temp <= open_threshold:
+                return {
+                    "status": "heating",
+                    "reason": f"Return {return_temp}°C ≤ {open_threshold}°C - valve {valve_position}% (no room temp)"
+                }
+            else:
+                return {
+                    "status": "between_thresholds",
+                    "reason": f"Return {return_temp}°C between {open_threshold}-{close_threshold}°C - valve {valve_position}%"
+                }
+
     
     async def async_set_valve_position(self, trv_entity_id: str, position: int) -> None:
         """Service to manually set valve position for a specific TRV."""
