@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRV Control Card Preview</title>
+  <style>
+    body {
+      font-family: Roboto, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+      margin: 0;
+    }
+    ha-card {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    .card-content {
+      color: #212121;
+    }
+    .gauge-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 20px 0;
+      position: relative;
+    }
+    .gauge {
+      width: 200px;
+      height: 200px;
+      position: relative;
+    }
+    .gauge-circle {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: conic-gradient(
+        from -135deg,
+        #4caf5030 0deg,
+        #4caf5030 195deg,
+        #e0e0e0 195deg,
+        #e0e0e0 270deg,
+        transparent 270deg
+      );
+      position: relative;
+    }
+    .gauge-inner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      background: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .current-temp {
+      font-size: 36px;
+      font-weight: bold;
+      color: #4caf50;
+    }
+    .temp-unit {
+      font-size: 16px;
+      color: #757575;
+      margin-top: -8px;
+    }
+    .target-temp-display {
+      font-size: 14px;
+      color: #757575;
+      margin-top: 4px;
+    }
+    .temp-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin: 16px 0;
+    }
+    .temp-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 2px solid #03a9f4;
+      background: white;
+      color: #03a9f4;
+      font-size: 24px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .temp-btn:hover {
+      background: #03a9f4;
+      color: white;
+    }
+    .temp-btn:active {
+      transform: scale(0.95);
+    }
+    .target-temp-control {
+      font-size: 28px;
+      font-weight: bold;
+      min-width: 80px;
+      text-align: center;
+    }
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: #4caf5010;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #4caf50;
+      font-weight: 500;
+    }
+    .window-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: #4caf5020;
+      color: #4caf50;
+      font-size: 12px;
+    }
+    .sensors-info {
+      display: flex;
+      gap: 12px;
+      margin: 12px 0;
+      font-size: 12px;
+      color: #757575;
+      justify-content: center;
+    }
+    .sensor-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .trv-list {
+      margin-top: 16px;
+    }
+    .trv-item {
+      background: #fafafa;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .trv-name {
+      font-weight: 500;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .trv-stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+    }
+    .stat-label {
+      font-size: 11px;
+      color: #757575;
+    }
+    .stat-value {
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .valve-bar {
+      margin-top: 8px;
+    }
+    .valve-bar-bg {
+      background: #e0e0e0;
+      border-radius: 4px;
+      height: 8px;
+      overflow: hidden;
+    }
+    .valve-bar-fill {
+      background: #4caf50;
+      height: 100%;
+      transition: width 0.3s ease;
+    }
+    .valve-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #757575;
+      margin-top: 4px;
+    }
+    .status-reason {
+      margin-top: 8px;
+      padding: 8px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #757575;
+    }
+    .icon {
+      width: 18px;
+      height: 18px;
+      display: inline-block;
+    }
+    h2 {
+      text-align: center;
+      color: #424242;
+      font-weight: 300;
+    }
+    .temp-range {
+      text-align: center;
+      font-size: 12px;
+      color: #757575;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h2>TRV Control Card Preview</h2>
+  
+  <ha-card>
+    <div class="card-content">
+      <div class="status-bar">
+        <div class="status-badge">
+          <span class="icon">✓</span>
+          Target Reached
+        </div>
+        <div class="window-indicator">
+          <span class="icon">🪟</span>
+          Closed
+        </div>
+      </div>
+
+      <div class="gauge-container">
+        <div class="gauge">
+          <div class="gauge-circle">
+            <div class="gauge-inner">
+              <div class="current-temp">24.6</div>
+              <div class="temp-unit">°C</div>
+              <div class="target-temp-display">Target: 24.0°C</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="temp-controls">
+        <button class="temp-btn">−</button>
+        <div class="target-temp-control">24.0°C</div>
+        <button class="temp-btn">+</button>
+      </div>
+      
+      <div class="temp-range">5°C - 30°C</div>
+
+      <div class="sensors-info">
+        <div class="sensor-item">
+          <span class="icon">🌡️</span>
+          sensor.temp_test_temperature
+        </div>
+      </div>
+
+      <div class="trv-list">
+        <div class="trv-item">
+          <div class="trv-name">
+            <span class="icon">📡</span>
+            Trv Test
+          </div>
+          
+          <div class="trv-stats">
+            <div class="stat">
+              <div class="stat-label">Return Temp</div>
+              <div class="stat-value">26.3°C</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Valve Position</div>
+              <div class="stat-value">0%</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Close Threshold</div>
+              <div class="stat-value">27°C</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Open Threshold</div>
+              <div class="stat-value">26°C</div>
+            </div>
+          </div>
+
+          <div class="valve-bar">
+            <div class="valve-bar-bg">
+              <div class="valve-bar-fill" style="width: 0%"></div>
+            </div>
+            <div class="valve-label">
+              <span>Valve: 0%</span>
+              <span>Max: 10%</span>
+            </div>
+          </div>
+
+          <div class="status-reason">
+            Room 24.6°C ≥ target 24.0°C - valve closed
+          </div>
+        </div>
+      </div>
+    </div>
+  </ha-card>
+</body>
+</html>
