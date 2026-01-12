@@ -231,11 +231,13 @@ class TRVClimate(ClimateEntity):
                     temp_state.state,
                 )
         
-        # Get initial return temps
+        # Get initial return temps and trigger valve control
         for trv in self._trvs:
             if return_state := self.hass.states.get(trv[CONF_RETURN_TEMP]):
                 try:
                     self._trv_states[trv[CONF_TRV]]["return_temp"] = float(return_state.state)
+                    # Immediately check valve control with current settings
+                    await self._async_control_valve(trv)
                 except (ValueError, TypeError):
                     pass
         
@@ -616,7 +618,7 @@ class TRVClimate(ClimateEntity):
             
             attrs[f"{prefix}_entity"] = trv_id
             attrs[f"{prefix}_return_temp_sensor"] = trv[CONF_RETURN_TEMP]
-            attrs[f"{prefix}_return_temp"] = trv_state["return_temp"]
+            attrs[f"{prefix}_return_temp"] = round(trv_state["return_temp"], 1) if trv_state["return_temp"] is not None else None
             attrs[f"{prefix}_valve_position"] = trv_state["valve_position"]
             attrs[f"{prefix}_valve_control_active"] = trv_state["valve_control_active"]
             attrs[f"{prefix}_close_threshold"] = trv.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE)

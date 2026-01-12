@@ -46,9 +46,10 @@
       },
       "room_options": {
         "title": "Manage Room TRVs",
-        "description": "Add or remove TRVs for {room_name}",
+        "description": "Add, edit or remove TRVs for {room_name}",
         "menu_options": {
           "add_trv": "Add TRV",
+          "edit_trv": "Edit TRV Settings",
           "remove_trv": "Remove TRV",
           "list_trvs": "List TRVs"
         }
@@ -65,6 +66,21 @@
         },
         "data_description": {
           "return_temp": "Temperature sensor on this TRV's radiator return pipe",
+          "return_temp_close": "When return temperature reaches this, valve closes",
+          "return_temp_open": "When return temperature drops to this, valve opens",
+          "max_valve_position": "Maximum valve opening percentage (0-100%)"
+        }
+      },
+      "edit_trv": {
+        "title": "Edit TRV Settings for {room_name}",
+        "description": "Modify return temperature thresholds and valve position",
+        "data": {
+          "trv": "TRV to edit",
+          "return_temp_close": "Return Temp Close Valve (°C)",
+          "return_temp_open": "Return Temp Open Valve (°C)",
+          "max_valve_position": "Maximum Valve Position (%)"
+        },
+        "data_description": {
           "return_temp_close": "When return temperature reaches this, valve closes",
           "return_temp_open": "When return temperature drops to this, valve opens",
           "max_valve_position": "Maximum valve opening percentage (0-100%)"

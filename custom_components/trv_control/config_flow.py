@@ -203,7 +203,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Show room management options."""
         return self.async_show_menu(
             step_id="room_options",
-            menu_options=["add_trv", "remove_trv", "list_trvs"],
+            menu_options=["add_trv", "edit_trv", "remove_trv", "list_trvs"],
         )
 
     async def async_step_add_trv(
@@ -249,6 +249,103 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             errors=errors,
             description_placeholders={"room_name": self._selected_room},
         )
+
+    async def async_step_edit_trv(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Edit TRV settings in the selected room."""
+        rooms = self._get_rooms()
+        
+        # Find the selected room
+        selected_room_config = None
+        for room in rooms:
+            if room[CONF_ROOM_NAME] == self._selected_room:
+                selected_room_config = room
+                break
+        
+        if not selected_room_config or not selected_room_config.get(CONF_TRVS):
+            return self.async_abort(reason="no_trvs")
+
+        # Step 1: Select which TRV to edit
+        if not hasattr(self, "_selected_trv"):
+            if user_input is not None:
+                self._selected_trv = user_input["trv"]
+                # Find the TRV config to get current values
+                for trv in selected_room_config[CONF_TRVS]:
+                    if trv[CONF_TRV] == self._selected_trv:
+                        self._selected_trv_config = trv
+                        break
+                
+                # Show edit form with current values
+                return self.async_show_form(
+                    step_id="edit_trv",
+                    data_schema=vol.Schema(
+                        {
+                            vol.Required(
+                                CONF_RETURN_TEMP_CLOSE,
+                                default=trv.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE)
+                            ): selector.NumberSelector(
+                                selector.NumberSelectorConfig(min=20, max=80, step=0.5, unit_of_measurement="°C")
+                            ),
+                            vol.Required(
+                                CONF_RETURN_TEMP_OPEN,
+                                default=trv.get(CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN)
+                            ): selector.NumberSelector(
+                                selector.NumberSelectorConfig(min=20, max=80, step=0.5, unit_of_measurement="°C")
+                            ),
+                            vol.Required(
+                                CONF_MAX_VALVE_POSITION,
+                                default=trv.get(CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION)
+                            ): selector.NumberSelector(
+                                selector.NumberSelectorConfig(min=0, max=100, step=1, unit_of_measurement="%")
+                            ),
+                        }
+                    ),
+                    description_placeholders={"room_name": self._selected_room},
+                )
+            
+            # Show TRV selection list
+            trv_ids = [trv[CONF_TRV] for trv in selected_room_config[CONF_TRVS]]
+            
+            return self.async_show_form(
+                step_id="edit_trv",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required("trv"): vol.In(trv_ids),
+                    }
+                ),
+                description_placeholders={"room_name": self._selected_room},
+            )
+        
+        # Step 2: Save the edited values
+        if user_input is not None:
+            try:
+                # Update the TRV config
+                for trv in selected_room_config[CONF_TRVS]:
+                    if trv[CONF_TRV] == self._selected_trv:
+                        trv[CONF_RETURN_TEMP_CLOSE] = user_input[CONF_RETURN_TEMP_CLOSE]
+                        trv[CONF_RETURN_TEMP_OPEN] = user_input[CONF_RETURN_TEMP_OPEN]
+                        trv[CONF_MAX_VALVE_POSITION] = user_input[CONF_MAX_VALVE_POSITION]
+                        break
+                
+                await self._save_rooms(rooms)
+                
+                # Clear selection for next time
+                delattr(self, "_selected_trv")
+                delattr(self, "_selected_trv_config")
+                
+                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+                
+                return self.async_create_entry(title="", data={})
+                    
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception")
+                # Clear selection
+                if hasattr(self, "_selected_trv"):
+                    delattr(self, "_selected_trv")
+                if hasattr(self, "_selected_trv_config"):
+                    delattr(self, "_selected_trv_config")
+                return self.async_abort(reason="unknown")
 
     async def async_step_remove_trv(
         self, user_input: dict[str, Any] | None = None
