@@ -309,7 +309,7 @@ class TRVClimate(ClimateEntity):
                 # Safety check: close if return temp is too high
                 if return_temp >= close_threshold:
                     _LOGGER.info(
-                        "Room temp %.1f°C < target %.1f°C, but return temp %.1f°C >= %.1f°C - keeping valve closed for %s",
+                        "Room temp %.1f°C < target %.1f°C, but return temp %.1f°C >= %.1f°C - closing valve for %s",
                         room_temp,
                         target_temp,
                         return_temp,
@@ -320,20 +320,31 @@ class TRVClimate(ClimateEntity):
                         await self._async_set_valve_position(trv_id, 0)
                         trv_state["valve_control_active"] = True
                 
-                # Open valve if return temp is acceptable
+                # Open valve only when return temp is low enough
+                elif return_temp <= open_threshold:
+                    # Room needs heating and return temp is acceptable - open valve
+                    if trv_state["valve_position"] != max_position:
+                        _LOGGER.info(
+                            "Room temp %.1f°C < target %.1f°C and return temp %.1f°C <= %.1f°C - opening valve to %d%% for %s",
+                            room_temp,
+                            target_temp,
+                            return_temp,
+                            open_threshold,
+                            max_position,
+                            trv_id,
+                        )
+                        await self._async_set_valve_position(trv_id, max_position)
+                        trv_state["valve_control_active"] = False
+                # Between thresholds - maintain current state
                 else:
-                    # Room needs heating and return temp is OK - ensure valve is open
-                    _LOGGER.info(
-                        "Room temp %.1f°C < target %.1f°C and return temp %.1f°C < %.1f°C - opening valve to %d%% for %s",
-                        room_temp,
-                        target_temp,
+                    _LOGGER.debug(
+                        "Return temp %.1f°C between open %.1f°C and close %.1f°C - maintaining current valve position %d%% for %s",
                         return_temp,
+                        open_threshold,
                         close_threshold,
-                        max_position,
+                        trv_state["valve_position"],
                         trv_id,
                     )
-                    await self._async_set_valve_position(trv_id, max_position)
-                    trv_state["valve_control_active"] = False
         
         else:
             # Fallback to return temp only if room temp not available
