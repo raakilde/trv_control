@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     DOMAIN,
@@ -435,6 +436,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             room_name = user_input["room"]
             _LOGGER.info("Removing room: %s", room_name)
+            
+            # Delete the entity from registry before removing the room
+            entity_reg = er.async_get(self.hass)
+            unique_id = f"{self.config_entry.entry_id}_{room_name.lower().replace(' ', '_')}"
+            entity_id = entity_reg.async_get_entity_id("climate", DOMAIN, unique_id)
+            if entity_id:
+                _LOGGER.info("Removing entity %s from registry", entity_id)
+                entity_reg.async_remove(entity_id)
+            
             rooms = [room for room in rooms if room[CONF_ROOM_NAME] != room_name]
             _LOGGER.info("Rooms after removal: %s", [r[CONF_ROOM_NAME] for r in rooms])
             
