@@ -115,16 +115,30 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     
     def _get_rooms(self) -> list:
         """Get rooms from options or data."""
-        return self.config_entry.options.get(CONF_ROOMS, self.config_entry.data.get(CONF_ROOMS, []))
+        # If options has rooms, use that. Otherwise use data
+        rooms = self.config_entry.options.get(CONF_ROOMS)
+        if rooms is None:
+            rooms = self.config_entry.data.get(CONF_ROOMS, [])
+            # Copy to options so future changes work
+            if rooms:
+                self._save_rooms(rooms)
+        return rooms
     
     def _save_rooms(self, rooms: list) -> None:
         """Save rooms to options."""
-        _LOGGER.info("Saving %d rooms to config entry options", len(rooms))
+        _LOGGER.warning("_save_rooms called with %d rooms", len(rooms))
+        # Make a deep copy to avoid reference issues
+        rooms_copy = [dict(room) for room in rooms]
+        for room in rooms_copy:
+            if CONF_TRVS in room:
+                room[CONF_TRVS] = [dict(trv) for trv in room[CONF_TRVS]]
+        
+        _LOGGER.warning("Calling async_update_entry with %d rooms", len(rooms_copy))
         self.hass.config_entries.async_update_entry(
             self.config_entry,
-            options={**self.config_entry.options, CONF_ROOMS: rooms},
+            options={**self.config_entry.options, CONF_ROOMS: rooms_copy},
         )
-        _LOGGER.info("Config entry updated with %d rooms", len(rooms))
+        _LOGGER.warning("Config entry updated - options now has %d rooms", len(self.config_entry.options.get(CONF_ROOMS, [])))
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -416,20 +430,24 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Remove a room."""
+        _LOGGER.warning("async_step_remove_room called with user_input: %s", user_input)
         rooms = self._get_rooms()
+        _LOGGER.warning("Current rooms: %s", [r[CONF_ROOM_NAME] for r in rooms])
         
         if not rooms:
             return self.async_abort(reason="no_rooms")
 
         if user_input is not None:
             room_name = user_input["room"]
-            _LOGGER.info("Removing room: %s", room_name)
+            _LOGGER.warning("Removing room: %s", room_name)
             rooms = [room for room in rooms if room[CONF_ROOM_NAME] != room_name]
-            _LOGGER.info("Rooms after removal: %s", [r[CONF_ROOM_NAME] for r in rooms])
+            _LOGGER.warning("Rooms after removal: %s", [r[CONF_ROOM_NAME] for r in rooms])
             
             self._save_rooms(rooms)
             
+            _LOGGER.warning("About to reload config entry")
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            _LOGGER.warning("Config entry reloaded")
             
             return self.async_create_entry(title="", data={})
 
