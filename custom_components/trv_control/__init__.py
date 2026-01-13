@@ -64,11 +64,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if isinstance(entity_ids, str):
             entity_ids = [entity_ids]
         
-        # Find the climate entity
-        for entity in hass.data["climate"].entities:
-            if entity.entity_id in entity_ids and hasattr(entity, "async_set_valve_position"):
+        # Find the climate entity using component helper
+        component = hass.data.get("entity_components", {}).get("climate")
+        if not component:
+            _LOGGER.error("Climate component not found")
+            return
+        
+        for entity_id in entity_ids:
+            entity = component.get_entity(entity_id)
+            if entity and hasattr(entity, "async_set_valve_position"):
                 await entity.async_set_valve_position(trv_entity_id, position)
-                break
+                return
 
     async def async_set_trv_thresholds(call):
         """Handle set TRV thresholds service."""
@@ -97,16 +103,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         _LOGGER.info("Target entities: %s", entity_ids)
         
-        # Find the climate entity
-        for entity in hass.data["climate"].entities:
-            if entity.entity_id in entity_ids and hasattr(entity, "async_set_trv_thresholds"):
-                _LOGGER.info("Found entity %s, calling async_set_trv_thresholds", entity.entity_id)
+        # Find the climate entity using component helper
+        component = hass.data.get("entity_components", {}).get("climate")
+        if not component:
+            _LOGGER.error("Climate component not found")
+            return
+        
+        for entity_id in entity_ids:
+            entity = component.get_entity(entity_id)
+            if entity and hasattr(entity, "async_set_trv_thresholds"):
+                _LOGGER.info("Found entity %s, calling async_set_trv_thresholds", entity_id)
                 await entity.async_set_trv_thresholds(
                     trv_entity_id, close_threshold, open_threshold, max_valve_position
                 )
-                break
-        else:
-            _LOGGER.error("No matching climate entity found in %s", entity_ids)
+                return
+        
+        _LOGGER.error("No matching climate entity found in %s", entity_ids)
 
     # Register services
     hass.services.async_register(
