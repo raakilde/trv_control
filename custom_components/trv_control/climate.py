@@ -700,7 +700,7 @@ class TRVClimate(ClimateEntity):
         elif all_return_temp_high:
             return {"status": "return_temp_high"}
         else:
-            return {"status": "waiting"}
+            return {"status": "waiting_for_cooldown"}
     
     def _determine_trv_status_with_reason(self, trv_config: dict[str, Any], trv_state: dict[str, Any]) -> dict[str, str]:
         """Determine status and reason for individual TRV."""
