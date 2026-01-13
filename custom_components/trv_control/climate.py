@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from datetime import datetime
+from homeassistant.util import dt as dt_util
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -89,6 +91,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         self._attr_hvac_mode = HVACMode.HEAT
         self._attr_target_temperature = 20.0
         self._attr_current_temperature = None
+        self._temp_last_updated = None
         self._window_open = False
         self._saved_hvac_mode = HVACMode.HEAT
         self._attr_min_temp = 5.0
@@ -101,6 +104,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             trv_id = trv[CONF_TRV]
             self._trv_states[trv_id] = {
                 "return_temp": None,
+                "return_temp_last_updated": None,
                 "valve_position": 0,
                 "valve_control_active": False,
             }
@@ -171,6 +175,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                             new_temp,
                         )
                         self._attr_current_temperature = new_temp
+                        self._temp_last_updated = new_state.last_updated
                         # Send updated room temperature to all TRVs
                         self.hass.async_create_task(
                             self._async_send_room_temperature_to_all_trvs(self._attr_current_temperature)
@@ -184,6 +189,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     try:
                         return_temp = float(new_state.state)
                         self._trv_states[trv[CONF_TRV]]["return_temp"] = return_temp
+                        self._trv_states[trv[CONF_TRV]]["return_temp_last_updated"] = new_state.last_updated
                         # Check valve control based on return temperature
                         self.hass.async_create_task(self._async_control_valve(trv))
                     except (ValueError, TypeError):
@@ -226,6 +232,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         if temp_state := self.hass.states.get(self._temp_sensor_id):
             try:
                 self._attr_current_temperature = float(temp_state.state)
+                self._temp_last_updated = temp_state.last_updated
                 _LOGGER.info(
                     "[%s] Initial room temperature: %.1f°C from %s",
                     self._attr_name,
@@ -245,6 +252,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             if return_state := self.hass.states.get(trv[CONF_RETURN_TEMP]):
                 try:
                     self._trv_states[trv[CONF_TRV]]["return_temp"] = float(return_state.state)
+                    self._trv_states[trv[CONF_TRV]]["return_temp_last_updated"] = return_state.last_updated
                     # Immediately check valve control with current settings
                     await self._async_control_valve(trv)
                 except (ValueError, TypeError):
@@ -613,6 +621,10 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             "window_open": self._window_open,  # Always show window state
         }
         
+        # Add timestamp for room temperature
+        if self._temp_last_updated:
+            attrs["temp_last_updated"] = self._format_relative_time(self._temp_last_updated)
+        
         if self._window_sensor_id:
             attrs["window_sensor"] = self._window_sensor_id
         
@@ -634,6 +646,11 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             attrs[f"{prefix}_entity"] = trv_id
             attrs[f"{prefix}_return_temp_sensor"] = trv[CONF_RETURN_TEMP]
             attrs[f"{prefix}_return_temp"] = round(trv_state["return_temp"], 1) if trv_state["return_temp"] is not None else None
+            
+            # Add timestamp for return temperature
+            if trv_state.get("return_temp_last_updated"):
+                attrs[f"{prefix}_return_temp_last_updated"] = self._format_relative_time(trv_state["return_temp_last_updated"])
+            
             attrs[f"{prefix}_valve_position"] = trv_state["valve_position"]
             attrs[f"{prefix}_valve_control_active"] = trv_state["valve_control_active"]
             attrs[f"{prefix}_close_threshold"] = trv.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE)
@@ -646,6 +663,34 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             attrs[f"{prefix}_status_reason"] = trv_status["reason"]
         
         return attrs
+    
+    def _format_relative_time(self, timestamp) -> str:
+        """Format timestamp as relative time in Danish."""
+        if timestamp is None:
+            return "Aldrig"
+        
+        now = dt_util.now()
+        delta = now - timestamp
+        
+        seconds = int(delta.total_seconds())
+        
+        if seconds < 60:
+            return "Nu"
+        elif seconds < 120:
+            return "For 1 minut siden"
+        elif seconds < 3600:
+            minutes = seconds // 60
+            return f"For {minutes} minutter siden"
+        elif seconds < 7200:
+            return "For 1 time siden"
+        elif seconds < 86400:
+            hours = seconds // 3600
+            return f"For {hours} timer siden"
+        elif seconds < 172800:
+            return "For 1 dag siden"
+        else:
+            days = seconds // 86400
+            return f"For {days} dage siden"
     
     def _determine_heating_status(self) -> dict[str, str]:
         """Determine the current heating status."""
