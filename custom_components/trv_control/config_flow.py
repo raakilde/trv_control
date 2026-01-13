@@ -119,10 +119,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     
     def _save_rooms(self, rooms: list) -> None:
         """Save rooms to options."""
+        _LOGGER.info("Saving %d rooms to config entry options", len(rooms))
         self.hass.config_entries.async_update_entry(
             self.config_entry,
             options={**self.config_entry.options, CONF_ROOMS: rooms},
         )
+        _LOGGER.info("Config entry updated with %d rooms", len(rooms))
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -421,7 +423,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         if user_input is not None:
             room_name = user_input["room"]
+            _LOGGER.info("Removing room: %s", room_name)
             rooms = [room for room in rooms if room[CONF_ROOM_NAME] != room_name]
+            _LOGGER.info("Rooms after removal: %s", [r[CONF_ROOM_NAME] for r in rooms])
             
             self._save_rooms(rooms)
             
