@@ -21,18 +21,22 @@ PLATFORMS: list[Platform] = [Platform.CLIMATE]
 
 SET_VALVE_POSITION_SCHEMA = vol.Schema(
     {
+        vol.Optional("entity_id"): cv.entity_ids,
         vol.Required("trv_entity_id"): cv.entity_id,
         vol.Required("position"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
-    }
+    },
+    extra=vol.ALLOW_EXTRA,
 )
 
 SET_TRV_THRESHOLDS_SCHEMA = vol.Schema(
     {
+        vol.Optional("entity_id"): cv.entity_ids,
         vol.Required("trv_entity_id"): cv.entity_id,
         vol.Optional("close_threshold"): vol.Coerce(float),
         vol.Optional("open_threshold"): vol.Coerce(float),
         vol.Optional("max_valve_position"): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
-    }
+    },
+    extra=vol.ALLOW_EXTRA,
 )
 
 
