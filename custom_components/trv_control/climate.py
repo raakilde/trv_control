@@ -372,12 +372,6 @@ class TRVClimate(ClimateEntity):
         
         _LOGGER.info("Setting valve position to %d%% for %s", position, trv_id)
         
-        # Set TRV setpoint to ensure it will heat when valve is open
-        if position > 0:
-            # Set high setpoint to ensure TRV heats
-            _LOGGER.info("Setting TRV %s setpoint to max %.1f°C to enable heating", trv_id, self._attr_max_temp)
-            await self._async_send_temperature_to_trv(trv_id, self._attr_max_temp)
-        
         # Try to set position via number entity first
         # Possible entity names for valve opening degree
         number_patterns = [
