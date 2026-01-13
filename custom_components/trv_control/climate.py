@@ -14,6 +14,7 @@ from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
+from homeassistant.helpers.restore_state import RestoreEntity
 from datetime import timedelta
 
 from .const import (
@@ -53,7 +54,7 @@ async def async_setup_entry(
 
 
 
-class TRVClimate(ClimateEntity):
+class TRVClimate(ClimateEntity, RestoreEntity):
     """Representation of a TRV Climate device."""
 
     _attr_has_entity_name = True
