@@ -44,7 +44,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up the climate platform."""
     # Get rooms from options if available, otherwise from data
-    rooms = config_entry.options.get(CONF_ROOMS, config_entry.data.get(CONF_ROOMS, []))
+    # Check explicitly for None to allow empty list
+    if CONF_ROOMS in config_entry.options:
+        rooms = config_entry.options[CONF_ROOMS]
+    else:
+        rooms = config_entry.data.get(CONF_ROOMS, [])
     
     entities = []
     for room in rooms:
