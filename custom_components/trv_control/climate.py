@@ -80,9 +80,9 @@ class TRVClimate(ClimateEntity):
         # Store list of TRVs with their configs
         self._trvs = room_data.get(CONF_TRVS, [])
         
-        # State tracking - restore target temp from options or use default
+        # State tracking - default target temp will be restored in async_added_to_hass
         self._attr_hvac_mode = HVACMode.HEAT
-        self._attr_target_temperature = room_data.get("target_temperature", 20.0)
+        self._attr_target_temperature = 20.0
         self._attr_current_temperature = None
         self._window_open = False
         self._saved_hvac_mode = HVACMode.HEAT
