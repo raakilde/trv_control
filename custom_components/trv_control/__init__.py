@@ -21,7 +21,6 @@ PLATFORMS: list[Platform] = [Platform.CLIMATE]
 
 SET_VALVE_POSITION_SCHEMA = vol.Schema(
     {
-        vol.Required("entity_id"): cv.entity_id,
         vol.Required("trv_entity_id"): cv.entity_id,
         vol.Required("position"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
     }
@@ -29,7 +28,6 @@ SET_VALVE_POSITION_SCHEMA = vol.Schema(
 
 SET_TRV_THRESHOLDS_SCHEMA = vol.Schema(
     {
-        vol.Required("entity_id"): cv.entity_id,
         vol.Required("trv_entity_id"): cv.entity_id,
         vol.Optional("close_threshold"): vol.Coerce(float),
         vol.Optional("open_threshold"): vol.Coerce(float),
@@ -47,27 +45,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def async_set_valve_position(call):
         """Handle set valve position service."""
-        entity_id = call.data["entity_id"]
         trv_entity_id = call.data["trv_entity_id"]
         position = call.data["position"]
         
+        # Get target entity from service call
+        entity_ids = call.context.target_list if hasattr(call.context, 'target_list') else []
+        if not entity_ids:
+            _LOGGER.error("No target entity specified")
+            return
+        
         # Find the climate entity
         for entity in hass.data["climate"].entities:
-            if entity.entity_id == entity_id and hasattr(entity, "async_set_valve_position"):
+            if entity.entity_id in entity_ids and hasattr(entity, "async_set_valve_position"):
                 await entity.async_set_valve_position(trv_entity_id, position)
                 break
 
     async def async_set_trv_thresholds(call):
         """Handle set TRV thresholds service."""
-        entity_id = call.data["entity_id"]
         trv_entity_id = call.data["trv_entity_id"]
         close_threshold = call.data.get("close_threshold")
         open_threshold = call.data.get("open_threshold")
         max_valve_position = call.data.get("max_valve_position")
         
+        # Get target entity from service call
+        entity_ids = call.context.target_list if hasattr(call.context, 'target_list') else []
+        if not entity_ids:
+            _LOGGER.error("No target entity specified")
+            return
+        
         # Find the climate entity
         for entity in hass.data["climate"].entities:
-            if entity.entity_id == entity_id and hasattr(entity, "async_set_trv_thresholds"):
+            if entity.entity_id in entity_ids and hasattr(entity, "async_set_trv_thresholds"):
                 await entity.async_set_trv_thresholds(
                     trv_entity_id, close_threshold, open_threshold, max_valve_position
                 )
