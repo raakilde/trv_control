@@ -841,20 +841,34 @@ class TRVClimate(ClimateEntity, RestoreEntity):
     
     async def _save_config(self) -> None:
         """Save current configuration to config entry."""
-        # Get current rooms from options
-        rooms = list(self.config_entry.options.get(CONF_ROOMS, []))
+        # Get current rooms from options, check explicitly for None to allow empty list
+        if CONF_ROOMS in self.config_entry.options:
+            rooms = list(self.config_entry.options[CONF_ROOMS])
+        else:
+            rooms = list(self.config_entry.data.get(CONF_ROOMS, []))
         
         # Find and update the current room's TRV configuration
         for i, room in enumerate(rooms):
             if room.get(CONF_ROOM_NAME) == self._room_name:
-                # Create a copy and update TRVs
+                # Create a deep copy to avoid reference issues
                 updated_room = dict(room)
-                updated_room[CONF_TRVS] = self._trvs
+                # Deep copy TRVs list
+                updated_room[CONF_TRVS] = [dict(trv) for trv in self._trvs]
                 rooms[i] = updated_room
                 break
+        
+        # Create deep copy of all rooms to avoid reference issues
+        rooms_copy = []
+        for room in rooms:
+            room_copy = dict(room)
+            if CONF_TRVS in room_copy:
+                room_copy[CONF_TRVS] = [dict(trv) for trv in room_copy[CONF_TRVS]]
+            rooms_copy.append(room_copy)
         
         # Update config entry with new data
         self.hass.config_entries.async_update_entry(
             self.config_entry,
-            options={**self.config_entry.options, CONF_ROOMS: rooms}
+            options={**self.config_entry.options, CONF_ROOMS: rooms_copy}
         )
+        
+        _LOGGER.info("Saved configuration for room %s", self._room_name)
