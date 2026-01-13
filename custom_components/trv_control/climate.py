@@ -252,15 +252,6 @@ class TRVClimate(ClimateEntity):
         
         # Send initial room temperature to all TRVs now that we have the initial state
         await _async_update_trv_temperature()
-        
-        # Send initial target temperature to all TRVs to ensure setpoint is synchronized
-        if self._attr_target_temperature:
-            _LOGGER.info(
-                "[%s] Syncing initial target temperature %.1f°C to TRVs",
-                self._attr_name,
-                self._attr_target_temperature,
-            )
-            await self._async_send_temperature_to_all_trvs(self._attr_target_temperature)
 
     async def async_will_remove_from_hass(self) -> None:
         """Run when entity will be removed from hass."""
@@ -581,10 +572,6 @@ class TRVClimate(ClimateEntity):
             return
 
         self._attr_target_temperature = temperature
-        
-        # Send temperature command to all TRVs
-        await self._async_send_temperature_to_all_trvs(temperature)
-        
         self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
