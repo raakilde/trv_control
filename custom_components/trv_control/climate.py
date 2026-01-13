@@ -827,4 +827,4 @@ class TRVClimate(ClimateEntity):
             options={**self.config_entry.options, CONF_ROOMS: rooms}
         )
 
-        _LOGGER.info("Saved configuration for room %s", self._room_name)
+        _LOGGER.info("Saved target temperature %.1f for room %s", self._attr_target_temperature, self._room_name)
