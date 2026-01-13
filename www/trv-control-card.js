@@ -1,4 +1,4 @@
-class TRVControlCard extends HTMLElement {
+/config/www/trv-control-card.jsclass TRVControlCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     

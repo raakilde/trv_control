@@ -306,7 +306,7 @@ class TRVClimate(ClimateEntity):
             
             # Room is below target - check return temp before opening
             elif room_temp < target_temp:
-                # Safety check: only open if return temp is not too high
+                # Safety check: close if return temp is too high
                 if return_temp >= close_threshold:
                     _LOGGER.info(
                         "Room temp %.1f°C < target %.1f°C, but return temp %.1f°C >= %.1f°C - keeping valve closed for %s",
@@ -321,15 +321,15 @@ class TRVClimate(ClimateEntity):
                         trv_state["valve_control_active"] = True
                 
                 # Open valve if return temp is acceptable
-                elif return_temp <= open_threshold:
-                    # Always ensure valve is at max position when return temp is low
+                else:
+                    # Room needs heating and return temp is OK - ensure valve is open
                     if trv_state["valve_position"] != max_position:
                         _LOGGER.info(
-                            "Room temp %.1f°C < target %.1f°C and return temp %.1f°C <= %.1f°C - opening valve to %d%% for %s",
+                            "Room temp %.1f°C < target %.1f°C and return temp %.1f°C < %.1f°C - opening valve to %d%% for %s",
                             room_temp,
                             target_temp,
                             return_temp,
-                            open_threshold,
+                            close_threshold,
                             max_position,
                             trv_id,
                         )
