@@ -107,6 +107,12 @@ class TRVClimate(ClimateEntity):
         """Run when entity about to be added to hass."""
         await super().async_added_to_hass()
         
+        # Restore previous state if available
+        if (last_state := await self.async_get_last_state()) is not None:
+            if last_state.attributes.get(ATTR_TEMPERATURE) is not None:
+                self._attr_target_temperature = last_state.attributes[ATTR_TEMPERATURE]
+                _LOGGER.info("Restored target temperature %.1f for room %s", self._attr_target_temperature, self._room_name)
+        
         # Send room temperature to all TRVs every 5 minutes
         async def _async_update_trv_temperature(now=None):
             """Send current room temperature from shared sensor to all TRVs."""
@@ -564,10 +570,6 @@ class TRVClimate(ClimateEntity):
             return
 
         self._attr_target_temperature = temperature
-        
-        # Save target temperature to config
-        await self._save_target_temperature()
-        
         self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
@@ -806,30 +808,3 @@ class TRVClimate(ClimateEntity):
             self.config_entry,
             options={**self.config_entry.options, CONF_ROOMS: rooms}
         )
-    
-    async def _save_target_temperature(self) -> None:
-        """Save current target temperature to config entry."""
-        # Get current rooms from options, or data if options is empty
-        rooms_source = self.config_entry.options.get(CONF_ROOMS) or self.config_entry.data.get(CONF_ROOMS, [])
-        rooms = list(rooms_source)
-        
-        # Find and update the current room's target temperature
-        for i, room in enumerate(rooms):
-            if room.get(CONF_ROOM_NAME) == self._room_name:
-                # Create a copy and update target temperature
-                updated_room = dict(room)
-                updated_room["target_temperature"] = self._attr_target_temperature
-                rooms[i] = updated_room
-                break
-        
-        # Always save to options
-        new_options = dict(self.config_entry.options)
-        new_options[CONF_ROOMS] = rooms
-        
-        # Update config entry with new options
-        self.hass.config_entries.async_update_entry(
-            self.config_entry,
-            options=new_options
-        )
-
-        _LOGGER.info("Saved target temperature %.1f for room %s", self._attr_target_temperature, self._room_name)
