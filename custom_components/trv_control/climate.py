@@ -84,8 +84,9 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         self._temp_sensor_id = room_data.get(CONF_TEMP_SENSOR)
         self._window_sensor_id = room_data.get(CONF_WINDOW_SENSOR)
         
-        # Store list of TRVs with their configs
-        self._trvs = room_data.get(CONF_TRVS, [])
+        # Store list of TRVs with their configs - make a deep copy to avoid reference issues
+        original_trvs = room_data.get(CONF_TRVS, [])
+        self._trvs = [dict(trv) for trv in original_trvs]
         
         # State tracking - default target temp will be restored in async_added_to_hass
         self._attr_hvac_mode = HVACMode.HEAT
@@ -556,6 +557,9 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     },
                     blocking=False,
                 )
+            
+            # Step 3: Also send target temperature setpoint
+            await self._async_send_temperature_to_trv(trv_id, self._attr_target_temperature)
                 
         except Exception as e:
             _LOGGER.error("Failed to send room temperature to %s: %s", trv_id, e)
@@ -583,6 +587,10 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             return
 
         self._attr_target_temperature = temperature
+        
+        # Send target temperature to all TRVs
+        await self._async_send_temperature_to_all_trvs(temperature)
+        
         self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
