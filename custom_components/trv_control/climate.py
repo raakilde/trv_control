@@ -323,18 +323,17 @@ class TRVClimate(ClimateEntity):
                 # Open valve if return temp is acceptable
                 else:
                     # Room needs heating and return temp is OK - ensure valve is open
-                    if trv_state["valve_position"] != max_position:
-                        _LOGGER.info(
-                            "Room temp %.1f°C < target %.1f°C and return temp %.1f°C < %.1f°C - opening valve to %d%% for %s",
-                            room_temp,
-                            target_temp,
-                            return_temp,
-                            close_threshold,
-                            max_position,
-                            trv_id,
-                        )
-                        await self._async_set_valve_position(trv_id, max_position)
-                        trv_state["valve_control_active"] = False
+                    _LOGGER.info(
+                        "Room temp %.1f°C < target %.1f°C and return temp %.1f°C < %.1f°C - opening valve to %d%% for %s",
+                        room_temp,
+                        target_temp,
+                        return_temp,
+                        close_threshold,
+                        max_position,
+                        trv_id,
+                    )
+                    await self._async_set_valve_position(trv_id, max_position)
+                    trv_state["valve_control_active"] = False
         
         else:
             # Fallback to return temp only if room temp not available
@@ -370,6 +369,12 @@ class TRVClimate(ClimateEntity):
         device_name = trv_id.replace("climate.", "")
         
         _LOGGER.info("Setting valve position to %d%% for %s", position, trv_id)
+        
+        # Set TRV setpoint to ensure it will heat when valve is open
+        if position > 0:
+            # Set high setpoint to ensure TRV heats
+            _LOGGER.info("Setting TRV %s setpoint to max %.1f°C to enable heating", trv_id, self._attr_max_temp)
+            await self._async_send_temperature_to_trv(trv_id, self._attr_max_temp)
         
         # Try to set position via number entity first
         # Possible entity names for valve opening degree
