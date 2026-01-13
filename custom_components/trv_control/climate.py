@@ -19,6 +19,7 @@ from datetime import timedelta
 from .const import (
     DOMAIN,
     CONF_ROOM_NAME,
+    CONF_ROOMS,
     CONF_TEMP_SENSOR,
     CONF_TRV,
     CONF_TRVS,
@@ -41,8 +42,6 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the climate platform."""
-    from .const import CONF_ROOMS
-    
     # Get rooms from options if available, otherwise from data
     rooms = config_entry.options.get(CONF_ROOMS, config_entry.data.get(CONF_ROOMS, []))
     
@@ -80,9 +79,9 @@ class TRVClimate(ClimateEntity):
         # Store list of TRVs with their configs
         self._trvs = room_data.get(CONF_TRVS, [])
         
-        # State tracking
+        # State tracking - restore target temp from options or use default
         self._attr_hvac_mode = HVACMode.HEAT
-        self._attr_target_temperature = 20.0
+        self._attr_target_temperature = room_data.get("target_temperature", 20.0)
         self._attr_current_temperature = None
         self._window_open = False
         self._saved_hvac_mode = HVACMode.HEAT
@@ -182,8 +181,6 @@ class TRVClimate(ClimateEntity):
                 # Update from TRV state
                 elif entity_id == trv[CONF_TRV]:
                     if hasattr(new_state, 'attributes'):
-                        if temp := new_state.attributes.get('temperature'):
-                            self._attr_target_temperature = float(temp)
                         if hvac_mode := new_state.state:
                             if hvac_mode in [mode.value for mode in HVACMode]:
                                 self._attr_hvac_mode = HVACMode(hvac_mode)
@@ -566,6 +563,10 @@ class TRVClimate(ClimateEntity):
             return
 
         self._attr_target_temperature = temperature
+        
+        # Save target temperature to config
+        await self._save_target_temperature()
+        
         self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
@@ -804,5 +805,25 @@ class TRVClimate(ClimateEntity):
             self.config_entry,
             options={**self.config_entry.options, CONF_ROOMS: rooms}
         )
+    
+    async def _save_target_temperature(self) -> None:
+        """Save current target temperature to config entry."""
+        # Get current rooms from options
+        rooms = list(self.config_entry.options.get(CONF_ROOMS, []))
         
+        # Find and update the current room's target temperature
+        for i, room in enumerate(rooms):
+            if room.get(CONF_ROOM_NAME) == self._room_name:
+                # Create a copy and update target temperature
+                updated_room = dict(room)
+                updated_room["target_temperature"] = self._attr_target_temperature
+                rooms[i] = updated_room
+                break
+        
+        # Update config entry with new data
+        self.hass.config_entries.async_update_entry(
+            self.config_entry,
+            options={**self.config_entry.options, CONF_ROOMS: rooms}
+        )
+
         _LOGGER.info("Saved configuration for room %s", self._room_name)
