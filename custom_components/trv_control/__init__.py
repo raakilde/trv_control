@@ -12,7 +12,7 @@ import homeassistant.helpers.config_validation as cv
 from .const import (
     DOMAIN,
     SERVICE_SET_VALVE_POSITION,
-    SERVICE_SET_RETURN_THRESHOLDS,
+    SERVICE_SET_TRV_THRESHOLDS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -22,15 +22,18 @@ PLATFORMS: list[Platform] = [Platform.CLIMATE]
 SET_VALVE_POSITION_SCHEMA = vol.Schema(
     {
         vol.Required("entity_id"): cv.entity_id,
+        vol.Required("trv_entity_id"): cv.entity_id,
         vol.Required("position"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
     }
 )
 
-SET_RETURN_THRESHOLDS_SCHEMA = vol.Schema(
+SET_TRV_THRESHOLDS_SCHEMA = vol.Schema(
     {
         vol.Required("entity_id"): cv.entity_id,
-        vol.Optional("close_temp"): vol.Coerce(float),
-        vol.Optional("open_temp"): vol.Coerce(float),
+        vol.Required("trv_entity_id"): cv.entity_id,
+        vol.Optional("close_threshold"): vol.Coerce(float),
+        vol.Optional("open_threshold"): vol.Coerce(float),
+        vol.Optional("max_valve_position"): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
     }
 )
 
@@ -45,24 +48,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def async_set_valve_position(call):
         """Handle set valve position service."""
         entity_id = call.data["entity_id"]
+        trv_entity_id = call.data["trv_entity_id"]
         position = call.data["position"]
         
         # Find the climate entity
         for entity in hass.data["climate"].entities:
             if entity.entity_id == entity_id and hasattr(entity, "async_set_valve_position"):
-                await entity.async_set_valve_position(position)
+                await entity.async_set_valve_position(trv_entity_id, position)
                 break
 
-    async def async_set_return_thresholds(call):
-        """Handle set return thresholds service."""
+    async def async_set_trv_thresholds(call):
+        """Handle set TRV thresholds service."""
         entity_id = call.data["entity_id"]
-        close_temp = call.data.get("close_temp")
-        open_temp = call.data.get("open_temp")
+        trv_entity_id = call.data["trv_entity_id"]
+        close_threshold = call.data.get("close_threshold")
+        open_threshold = call.data.get("open_threshold")
+        max_valve_position = call.data.get("max_valve_position")
         
         # Find the climate entity
         for entity in hass.data["climate"].entities:
-            if entity.entity_id == entity_id and hasattr(entity, "async_set_return_thresholds"):
-                await entity.async_set_return_thresholds(close_temp, open_temp)
+            if entity.entity_id == entity_id and hasattr(entity, "async_set_trv_thresholds"):
+                await entity.async_set_trv_thresholds(
+                    trv_entity_id, close_threshold, open_threshold, max_valve_position
+                )
                 break
 
     # Register services
@@ -75,9 +83,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     hass.services.async_register(
         DOMAIN,
-        SERVICE_SET_RETURN_THRESHOLDS,
-        async_set_return_thresholds,
-        schema=SET_RETURN_THRESHOLDS_SCHEMA,
+        SERVICE_SET_TRV_THRESHOLDS,
+        async_set_trv_thresholds,
+        schema=SET_TRV_THRESHOLDS_SCHEMA,
     )
 
     return True

@@ -67,11 +67,11 @@ class TRVClimate(ClimateEntity):
 
     def __init__(self, config_entry: ConfigEntry, room_data: dict[str, Any]) -> None:
         """Initialize the climate device."""
-        self._config_entry = config_entry
-        room_name = room_data.get(CONF_ROOM_NAME, "Room")
+        self.config_entry = config_entry
+        self._room_name = room_data.get(CONF_ROOM_NAME, "Room")
         
-        self._attr_unique_id = f"{config_entry.entry_id}_{room_name.lower().replace(' ', '_')}"
-        self._attr_name = f"{room_name} TRV Control"
+        self._attr_unique_id = f"{config_entry.entry_id}_{self._room_name.lower().replace(' ', '_')}"
+        self._attr_name = f"{self._room_name} TRV Control"
         
         # Store shared sensors
         self._temp_sensor_id = room_data.get(CONF_TEMP_SENSOR)
@@ -750,18 +750,59 @@ class TRVClimate(ClimateEntity):
         else:
             _LOGGER.error("TRV %s not found in room %s", trv_entity_id, self._attr_name)
     
-    async def async_set_return_thresholds(
-        self, trv_entity_id: str, close_temp: float | None = None, open_temp: float | None = None
+    async def async_set_trv_thresholds(
+        self,
+        trv_entity_id: str,
+        close_threshold: float | None = None,
+        open_threshold: float | None = None,
+        max_valve_position: int | None = None,
     ) -> None:
-        """Service to set return temperature thresholds for a specific TRV."""
+        """Service to set thresholds and max position for a specific TRV."""
         # Find the TRV config
         for trv in self._trvs:
             if trv[CONF_TRV] == trv_entity_id:
-                if close_temp is not None:
-                    trv[CONF_RETURN_TEMP_CLOSE] = close_temp
-                if open_temp is not None:
-                    trv[CONF_RETURN_TEMP_OPEN] = open_temp
-                self.async_write_ha_state()
+                updated = False
+                if close_threshold is not None:
+                    trv[CONF_RETURN_TEMP_CLOSE] = close_threshold
+                    _LOGGER.info("Set close threshold to %.1f°C for %s", close_threshold, trv_entity_id)
+                    updated = True
+                if open_threshold is not None:
+                    trv[CONF_RETURN_TEMP_OPEN] = open_threshold
+                    _LOGGER.info("Set open threshold to %.1f°C for %s", open_threshold, trv_entity_id)
+                    updated = True
+                if max_valve_position is not None:
+                    trv[CONF_MAX_VALVE_POSITION] = max_valve_position
+                    _LOGGER.info("Set max valve position to %d%% for %s", max_valve_position, trv_entity_id)
+                    updated = True
+                
+                if updated:
+                    # Save to config entry
+                    await self._save_config()
+                    # Trigger valve control check with new settings
+                    await self._async_control_valve(trv)
+                    self.async_write_ha_state()
                 return
         
         _LOGGER.error("TRV %s not found in room %s", trv_entity_id, self._attr_name)
+    
+    async def _save_config(self) -> None:
+        """Save current configuration to config entry."""
+        # Get current rooms from options
+        rooms = list(self.config_entry.options.get(CONF_ROOMS, []))
+        
+        # Find and update the current room's TRV configuration
+        for i, room in enumerate(rooms):
+            if room.get(CONF_ROOM_NAME) == self._room_name:
+                # Create a copy and update TRVs
+                updated_room = dict(room)
+                updated_room[CONF_TRVS] = self._trvs
+                rooms[i] = updated_room
+                break
+        
+        # Update config entry with new data
+        self.hass.config_entries.async_update_entry(
+            self.config_entry,
+            options={**self.config_entry.options, CONF_ROOMS: rooms}
+        )
+        
+        _LOGGER.info("Saved configuration for room %s", self._room_name)

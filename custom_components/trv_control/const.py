@@ -24,4 +24,4 @@ DEFAULT_MAX_VALVE_POSITION = 100
 
 # Services
 SERVICE_SET_VALVE_POSITION = "set_valve_position"
-SERVICE_SET_RETURN_THRESHOLDS = "set_return_thresholds"
+SERVICE_SET_TRV_THRESHOLDS = "set_trv_thresholds"

@@ -6,6 +6,13 @@ set_valve_position:
       domain: climate
       integration: trv_control
   fields:
+    trv_entity_id:
+      name: TRV Entity
+      description: The TRV entity to control
+      required: true
+      selector:
+        entity:
+          domain: climate
     position:
       name: Position
       description: Valve position (0-100%)
@@ -17,29 +24,48 @@ set_valve_position:
           step: 1
           unit_of_measurement: "%"
 
-set_return_thresholds:
-  name: Set Return Temperature Thresholds
-  description: Set the return temperature thresholds for valve control
+set_trv_thresholds:
+  name: Set TRV Thresholds
+  description: Set return temperature thresholds and max valve position for a specific TRV
   target:
     entity:
       domain: climate
       integration: trv_control
   fields:
-    close_temp:
-      name: Close Temperature
-      description: Temperature at which valve closes
+    trv_entity_id:
+      name: TRV Entity
+      description: The TRV entity to configure
+      required: true
+      selector:
+        entity:
+          domain: climate
+    close_threshold:
+      name: Close Threshold
+      description: Return temperature at which valve closes
+      required: false
       selector:
         number:
           min: 20
           max: 80
           step: 0.5
           unit_of_measurement: "°C"
-    open_temp:
-      name: Open Temperature
-      description: Temperature at which valve opens
+    open_threshold:
+      name: Open Threshold
+      description: Return temperature at which valve opens
+      required: false
       selector:
         number:
           min: 20
           max: 80
           step: 0.5
           unit_of_measurement: "°C"
+    max_valve_position:
+      name: Max Valve Position
+      description: Maximum valve opening percentage
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
