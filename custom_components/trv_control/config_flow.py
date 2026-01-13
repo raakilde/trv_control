@@ -442,9 +442,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             
             self._save_rooms(rooms)
             
-            _LOGGER.warning("About to reload config entry")
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            _LOGGER.warning("Config entry reloaded")
+            # Force unload and reload to properly remove entities
+            _LOGGER.warning("About to unload and reload config entry")
+            await self.hass.config_entries.async_unload(self.config_entry.entry_id)
+            await self.hass.config_entries.async_setup(self.config_entry.entry_id)
+            _LOGGER.warning("Config entry unloaded and reloaded")
             
             return self.async_create_entry(title="", data={})
 
