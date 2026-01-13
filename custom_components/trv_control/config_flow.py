@@ -115,14 +115,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     
     def _get_rooms(self) -> list:
         """Get rooms from options or data."""
-        # If options has rooms, use that. Otherwise use data
-        rooms = self.config_entry.options.get(CONF_ROOMS)
-        if rooms is None:
-            rooms = self.config_entry.data.get(CONF_ROOMS, [])
-            # Copy to options so future changes work
-            if rooms:
-                self._save_rooms(rooms)
-        return rooms
+        # Always prefer options if available
+        if CONF_ROOMS in self.config_entry.options:
+            return self.config_entry.options[CONF_ROOMS]
+        # Fall back to data
+        return self.config_entry.data.get(CONF_ROOMS, [])
     
     def _save_rooms(self, rooms: list) -> None:
         """Save rooms to options."""
