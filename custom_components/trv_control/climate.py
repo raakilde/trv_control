@@ -809,8 +809,9 @@ class TRVClimate(ClimateEntity):
     
     async def _save_target_temperature(self) -> None:
         """Save current target temperature to config entry."""
-        # Get current rooms from options
-        rooms = list(self.config_entry.options.get(CONF_ROOMS, []))
+        # Get current rooms from options, or data if options is empty
+        rooms_source = self.config_entry.options.get(CONF_ROOMS) or self.config_entry.data.get(CONF_ROOMS, [])
+        rooms = list(rooms_source)
         
         # Find and update the current room's target temperature
         for i, room in enumerate(rooms):
@@ -821,10 +822,14 @@ class TRVClimate(ClimateEntity):
                 rooms[i] = updated_room
                 break
         
-        # Update config entry with new data
+        # Always save to options
+        new_options = dict(self.config_entry.options)
+        new_options[CONF_ROOMS] = rooms
+        
+        # Update config entry with new options
         self.hass.config_entries.async_update_entry(
             self.config_entry,
-            options={**self.config_entry.options, CONF_ROOMS: rooms}
+            options=new_options
         )
 
         _LOGGER.info("Saved target temperature %.1f for room %s", self._attr_target_temperature, self._room_name)
