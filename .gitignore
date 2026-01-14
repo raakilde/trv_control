@@ -1,0 +1,3 @@
+.haconfig/
+*.pyc
+__pycache__/
