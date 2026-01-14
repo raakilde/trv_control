@@ -291,6 +291,34 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         if self._window_open or self._attr_hvac_mode == HVACMode.OFF:
             return
         
+        # Failsafe: If return temp hasn't updated in 1 hour and room needs heating, open valve
+        return_temp_last_updated = trv_state.get("return_temp_last_updated")
+        failsafe_active = False
+        if return_temp_last_updated:
+            now = dt_util.now()
+            time_since_update = (now - return_temp_last_updated).total_seconds()
+            room_temp = self._attr_current_temperature
+            target_temp = self._attr_target_temperature
+            
+            # If return temp is stale (>60 min) and room needs heating, force valve open
+            if time_since_update > 3600 and room_temp is not None and target_temp is not None:
+                if room_temp < target_temp:
+                    max_position = trv_config.get(CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION)
+                    if trv_state["valve_position"] != max_position:
+                        _LOGGER.warning(
+                            "Failsafe: Return temp for %s hasn't updated in %.0f minutes, room needs heating - forcing valve to %d%%",
+                            trv_id,
+                            time_since_update / 60,
+                            max_position
+                        )
+                        await self._async_set_valve_position(trv_id, max_position)
+                        trv_state["valve_control_active"] = True
+                    failsafe_active = True
+        
+        # If failsafe is active, don't run normal control logic
+        if failsafe_active:
+            return
+        
         # Get thresholds for this TRV
         close_threshold = trv_config.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE)
         open_threshold = trv_config.get(CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN)
@@ -343,7 +371,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                             trv_id,
                         )
                         await self._async_set_valve_position(trv_id, max_position)
-                        trv_state["valve_control_active"] = False
+                        trv_state["valve_control_active"] = True
                 # Between thresholds - maintain current state
                 else:
                     _LOGGER.debug(
@@ -381,7 +409,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                         trv_id,
                     )
                     await self._async_set_valve_position(trv_id, max_position)
-                    trv_state["valve_control_active"] = False
+                    trv_state["valve_control_active"] = True
 
     async def _async_set_valve_position(self, trv_id: str, position: int) -> None:
         """Set the valve position for a specific TRV."""
