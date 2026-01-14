@@ -760,7 +760,8 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             return_temp = trv_state["return_temp"]
             close_threshold = trv.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE)
             
-            if not trv_state["valve_control_active"]:
+            # If valve has any opening, consider it open
+            if trv_state["valve_position"] > 0:
                 any_valve_open = True
             
             if return_temp is None or return_temp < close_threshold:
