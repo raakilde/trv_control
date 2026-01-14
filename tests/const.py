@@ -15,13 +15,13 @@ from custom_components.trv_control.const import (
     CONF_MAX_VALVE_POSITION,
 )
 
-# Mock entity IDs
-MOCK_TEMP_SENSOR = "sensor.living_room_temperature"
-MOCK_TRV_1 = "climate.living_room_trv_1"
-MOCK_TRV_2 = "climate.living_room_trv_2"
-MOCK_RETURN_TEMP_1 = "sensor.return_temp_1"
-MOCK_RETURN_TEMP_2 = "sensor.return_temp_2"
-MOCK_WINDOW_SENSOR = "binary_sensor.living_room_window"
+# Mock entity IDs matching .devcontainer/configuration.yaml
+MOCK_TEMP_SENSOR = "sensor.living_room_temperature_sensor"
+MOCK_TRV_1 = "climate.living_room_trv"
+MOCK_TRV_2 = "climate.bedroom_trv"
+MOCK_RETURN_TEMP_1 = "sensor.living_room_return_temperature_sensor"
+MOCK_RETURN_TEMP_2 = "sensor.bedroom_return_temperature_sensor"
+MOCK_WINDOW_SENSOR = "binary_sensor.living_room_window_sensor"
 
 # Mock room configuration
 MOCK_ROOM_CONFIG = {

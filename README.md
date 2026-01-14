@@ -143,7 +143,7 @@ data:
 
 ### Window Detection
 1. Monitors configured window sensor continuously
-2. **Window opens**: 
+2. **Window opens**:
    - Saves current HVAC mode
    - Turns heating off immediately
    - Prevents operation while window is open
@@ -198,6 +198,70 @@ data:
 
 This component follows Home Assistant integration structure and best practices.
 
+### Development Environment
+
+#### Requirements
+- VSCode
+- Docker
+- Dev Containers extension
+
+#### Setup
+1. Clone the repository
+2. Open the repository in VSCode
+3. Click on the green button in the bottom left corner and select "Reopen in Container"
+4. Wait for the container to build
+5. Run the setup script: `./scripts/setup`
+6. Start Home Assistant: Run Task "Run Home Assistant on port 9123" or `./scripts/start`
+7. Open browser: http://localhost:9123
+
+#### Development Tasks (VSCode)
+
+Use Command Palette (Ctrl+Shift+P) → "Tasks: Run Task":
+- **Run Home Assistant on port 9123**: Start HA with your component loaded
+- **Sync configuration.yaml**: Copy test config to HA config directory
+- **Upgrade Home Assistant to latest dev**: Update to latest HA dev version
+- **Install a specific version of Home Assistant**: Install specific HA version
+
+#### Debug Configuration
+
+The dev container includes VSCode debug configuration:
+1. Set breakpoints in your code
+2. Press F5 or Run → Start Debugging
+3. Select "HomeAssistant" configuration
+4. Home Assistant will start in debug mode
+
+#### Test Configuration
+
+The `.devcontainer/configuration.yaml` includes:
+- **2 Rooms**: Living Room and Bedroom
+- **Dummy TRV entities**: Simulating Sonoff TRVZB devices
+- **Temperature sensors**: External room sensors for each room
+- **Return temp sensors**: Radiator return temperature sensors
+- **Window sensors**: Binary sensors for window detection
+- **Valve position controls**: Number entities for testing valve control
+
+Adjust the `input_number` sliders in the UI to simulate:
+- Temperature changes
+- Return temperature changes (test auto-close at 32°C)
+- Window opening/closing
+- Valve position changes
+
+#### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=custom_components.trv_control --cov-report=html
+
+# Run specific test file
+pytest tests/test_climate.py
+
+# Run specific test
+pytest tests/test_climate.py::test_return_temp_control_close_valve
+```
+
 ### Structure
 ```
 custom_components/trv_control/
@@ -208,6 +272,27 @@ custom_components/trv_control/
 ├── manifest.json       # Integration metadata
 ├── services.yaml       # Service definitions
 └── strings.json        # UI translations
+
+.devcontainer/
+├── devcontainer.json   # Dev container configuration
+└── configuration.yaml  # Test Home Assistant config
+
+.vscode/
+├── launch.json         # Debug configurations
+└── tasks.json          # VSCode tasks
+
+scripts/
+├── setup               # Initial setup script
+├── start               # Start Home Assistant
+├── sync                # Sync configuration
+├── upgrade-dev         # Upgrade to latest HA dev
+└── upgrade-version     # Install specific HA version
+
+tests/
+├── conftest.py         # Test fixtures
+├── const.py            # Test constants
+├── test_climate.py     # Climate platform tests
+└── test_config_flow.py # Config flow tests
 ```
 
 ## License

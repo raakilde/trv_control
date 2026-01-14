@@ -1,0 +1,193 @@
+default_config:
+
+logger:
+  default: INFO
+  logs:
+    custom_components.trv_control: debug
+    homeassistant.components.climate: debug
+
+# Input helpers for testing TRV Control
+input_boolean:
+  # Window sensors for two rooms
+  living_room_window:
+    name: "Living Room Window"
+    initial: off
+    icon: mdi:window-closed
+
+  bedroom_window:
+    name: "Bedroom Window"
+    initial: off
+    icon: mdi:window-closed
+
+input_number:
+  # Room temperature sensors (external sensors)
+  living_room_temp:
+    name: "Living Room Temperature"
+    min: 10
+    max: 30
+    step: 0.1
+    unit_of_measurement: "°C"
+    initial: 19.5
+    mode: box
+
+  bedroom_temp:
+    name: "Bedroom Temperature"
+    min: 10
+    max: 30
+    step: 0.1
+    unit_of_measurement: "°C"
+    initial: 18.5
+    mode: box
+
+  # Return temperature sensors (radiator return pipes)
+  living_room_return_temp:
+    name: "Living Room Return Temperature"
+    min: 10
+    max: 60
+    step: 0.1
+    unit_of_measurement: "°C"
+    initial: 28.0
+    mode: box
+
+  bedroom_return_temp:
+    name: "Bedroom Return Temperature"
+    min: 10
+    max: 60
+    step: 0.1
+    unit_of_measurement: "°C"
+    initial: 30.5
+    mode: box
+
+  # TRV internal sensors (for the dummy TRVs)
+  living_room_trv_temp:
+    name: "Living Room TRV Internal Temp"
+    min: 10
+    max: 30
+    step: 0.1
+    unit_of_measurement: "°C"
+    initial: 22
+    mode: box
+
+  bedroom_trv_temp:
+    name: "Bedroom TRV Internal Temp"
+    min: 10
+    max: 30
+    step: 0.1
+    unit_of_measurement: "°C"
+    initial: 21
+    mode: box
+
+  # Valve positions for dummy TRVs
+  living_room_valve_position:
+    name: "Living Room Valve Position"
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    initial: 45
+    mode: slider
+
+  bedroom_valve_position:
+    name: "Bedroom Valve Position"
+    min: 0
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    initial: 60
+    mode: slider
+
+# Dummy Zigbee2MQTT-like climate entities (simulating Sonoff TRVs)
+climate:
+  - platform: generic_thermostat
+    name: Living Room TRV
+    unique_id: living_room_trv_dummy
+    heater: input_boolean.living_room_window  # Just placeholder
+    target_sensor: input_number.living_room_trv_temp
+    min_temp: 5
+    max_temp: 30
+    target_temp: 20
+    cold_tolerance: 0.5
+    hot_tolerance: 0.5
+
+  - platform: generic_thermostat
+    name: Bedroom TRV
+    unique_id: bedroom_trv_dummy
+    heater: input_boolean.bedroom_window  # Just placeholder
+    target_sensor: input_number.bedroom_trv_temp
+    min_temp: 5
+    max_temp: 30
+    target_temp: 19
+    cold_tolerance: 0.5
+    hot_tolerance: 0.5
+
+# Template sensors for external room temperatures
+template:
+  - sensor:
+      - name: "Living Room Temperature Sensor"
+        unique_id: living_room_temp_sensor
+        state_class: measurement
+        device_class: temperature
+        unit_of_measurement: "°C"
+        state: '{{ states("input_number.living_room_temp") | float(19.5) | round(1) }}'
+
+      - name: "Bedroom Temperature Sensor"
+        unique_id: bedroom_temp_sensor
+        state_class: measurement
+        device_class: temperature
+        unit_of_measurement: "°C"
+        state: '{{ states("input_number.bedroom_temp") | float(18.5) | round(1) }}'
+
+      - name: "Living Room Return Temperature Sensor"
+        unique_id: living_room_return_temp_sensor
+        state_class: measurement
+        device_class: temperature
+        unit_of_measurement: "°C"
+        state: '{{ states("input_number.living_room_return_temp") | float(28) | round(1) }}'
+
+      - name: "Bedroom Return Temperature Sensor"
+        unique_id: bedroom_return_temp_sensor
+        state_class: measurement
+        device_class: temperature
+        unit_of_measurement: "°C"
+        state: '{{ states("input_number.bedroom_return_temp") | float(30) | round(1) }}'
+
+  - binary_sensor:
+      - name: "Living Room Window Sensor"
+        unique_id: living_room_window_sensor
+        device_class: window
+        state: '{{ is_state("input_boolean.living_room_window", "on") }}'
+
+      - name: "Bedroom Window Sensor"
+        unique_id: bedroom_window_sensor
+        device_class: window
+        state: '{{ is_state("input_boolean.bedroom_window", "on") }}'
+
+  - number:
+      - name: "Living Room TRV Valve Position"
+        unique_id: living_room_trv_valve_position
+        state: '{{ states("input_number.living_room_valve_position") | float(45) }}'
+        min: 0
+        max: 100
+        step: 1
+        unit_of_measurement: "%"
+        set_value:
+          - service: input_number.set_value
+            data:
+              entity_id: input_number.living_room_valve_position
+              value: "{{ value }}"
+
+      - name: "Bedroom TRV Valve Position"
+        unique_id: bedroom_trv_valve_position
+        state: '{{ states("input_number.bedroom_valve_position") | float(60) }}'
+        min: 0
+        max: 100
+        step: 1
+        unit_of_measurement: "%"
+        set_value:
+          - service: input_number.set_value
+            data:
+              entity_id: input_number.bedroom_valve_position
+              value: "{{ value }}"
+
+# If you need to debug uncomment the line below (doc: https://www.home-assistant.io/integrations/debugpy/)
+# debugpy:

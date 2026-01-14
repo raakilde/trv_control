@@ -1,0 +1,14 @@
+# Configure a default setup of Home Assistant (frontend, api, etc)
+default_config:
+
+# Text to speech
+tts:
+  - platform: google_translate
+
+logger:
+  default: info
+  logs:
+    custom_components.trv_control: debug
+
+# Example configuration.yaml entry
+trv_control:
