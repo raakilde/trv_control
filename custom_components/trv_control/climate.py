@@ -348,40 +348,44 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             # Room has reached or exceeded target - close valve
             if room_temp >= target_temp:
                 if trv_state["valve_position"] != 0:
+                    await self._async_set_valve_position(trv_id, 0)
+                    await self._async_send_temperature_to_trv(trv_id, target_temp)
+                    trv_state["valve_control_active"] = True
                     _LOGGER.info(
-                        "Room temp %.1f°C >= target %.1f°C, closing valve for TRV %s",
+                        "Room temp %.1f°C >= target %.1f°C, valve closed for TRV %s",
                         room_temp,
                         target_temp,
                         trv_id,
                     )
-                    await self._async_set_valve_position(trv_id, 0)
-                    await self._async_send_temperature_to_trv(trv_id, target_temp)
-                    trv_state["valve_control_active"] = True
             
             # Room is below target - check return temp before opening
             elif room_temp < target_temp:
                 # Safety check: close if return temp is too high
                 if return_temp >= close_threshold:
                     if trv_state["valve_position"] != 0:
-                        _LOGGER.info(
-                            "Room temp %.1f°C < target %.1f°C, but return temp %.1f°C >= %.1f°C - closing valve for %s",
-                            room_temp,
-                        target_temp,
-                        return_temp,
-                        close_threshold,
-                        trv_id,
-                    )
-                    if not trv_state["valve_control_active"]:
-                        await self._async_set_valve_position(trv_id, 0)
-                        await self._async_send_temperature_to_trv(trv_id, target_temp)
-                        trv_state["valve_control_active"] = True
+                        if not trv_state["valve_control_active"]:
+                            await self._async_set_valve_position(trv_id, 0)
+                            await self._async_send_temperature_to_trv(trv_id, target_temp)
+                            trv_state["valve_control_active"] = True
+                            _LOGGER.info(
+                                "Room temp %.1f°C < target %.1f°C, but return temp %.1f°C >= %.1f°C - valve closed for %s",
+                                room_temp,
+                                target_temp,
+                                return_temp,
+                                close_threshold,
+                                trv_id,
+                            )
                 
                 # Open valve only when return temp is low enough
                 elif return_temp <= open_threshold:
                     # Room needs heating and return temp is acceptable - open valve
                     if trv_state["valve_position"] != max_position:
+                        await self._async_set_valve_position(trv_id, max_position)
+                        await self._async_send_temperature_to_trv(trv_id, target_temp)
+                        await self._async_nudge_trv_if_idle(trv_id, target_temp)
+                        trv_state["valve_control_active"] = True
                         _LOGGER.info(
-                            "Room temp %.1f°C < target %.1f°C and return temp %.1f°C <= %.1f°C - opening valve to %d%% for %s",
+                            "Room temp %.1f°C < target %.1f°C and return temp %.1f°C <= %.1f°C - valve opened to %d%% for %s",
                             room_temp,
                             target_temp,
                             return_temp,
@@ -389,10 +393,6 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                             max_position,
                             trv_id,
                         )
-                        await self._async_set_valve_position(trv_id, max_position)
-                        await self._async_send_temperature_to_trv(trv_id, target_temp)
-                        await self._async_nudge_trv_if_idle(trv_id, target_temp)
-                        trv_state["valve_control_active"] = True
                 # Between thresholds - maintain current state
                 else:
                     _LOGGER.debug(
@@ -409,33 +409,33 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             # Close valve if return temp is too high
             if return_temp >= close_threshold:
                 if not trv_state["valve_control_active"]:
-                    _LOGGER.info(
-                        "Return temp %.1f >= %.1f, closing valve for TRV %s (room temp not available)",
-                        return_temp,
-                        close_threshold,
-                        trv_id,
-                    )
                     await self._async_set_valve_position(trv_id, 0)
                     if target_temp is not None:
                         await self._async_send_temperature_to_trv(trv_id, target_temp)
                     trv_state["valve_control_active"] = True
+                    _LOGGER.info(
+                        "Return temp %.1f >= %.1f, valve closed for TRV %s (room temp not available)",
+                        return_temp,
+                        close_threshold,
+                        trv_id,
+                    )
             
             # Open valve when temp drops below open threshold
             elif return_temp <= open_threshold:
                 # Always ensure valve is at max position when return temp is low
                 if trv_state["valve_position"] != max_position:
-                    _LOGGER.info(
-                        "Return temp %.1f <= %.1f, opening valve to %d%% for TRV %s (room temp not available)",
-                        return_temp,
-                        open_threshold,
-                        max_position,
-                        trv_id,
-                    )
                     await self._async_set_valve_position(trv_id, max_position)
                     if target_temp is not None:
                         await self._async_send_temperature_to_trv(trv_id, target_temp)
                         await self._async_nudge_trv_if_idle(trv_id, target_temp)
                     trv_state["valve_control_active"] = True
+                    _LOGGER.info(
+                        "Return temp %.1f <= %.1f, valve opened to %d%% for TRV %s (room temp not available)",
+                        return_temp,
+                        open_threshold,
+                        max_position,
+                        trv_id,
+                    )
 
     async def _async_nudge_trv_if_idle(self, trv_id: str, target_temp: float) -> None:
         """Check if TRV is idle when it should be heating, and force it to use external sensor.
@@ -847,29 +847,8 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         if room_temp >= target_temp:
             return {"status": "target_reached"}
         
-        # Room needs heating - check return temp
-        any_valve_open = False
-        all_return_temp_high = True
-        
-        for trv in self._trvs:
-            trv_id = trv[CONF_TRV]
-            trv_state = self._trv_states[trv_id]
-            return_temp = trv_state["return_temp"]
-            close_threshold = trv.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE)
-            
-            # If valve has any opening, consider it open
-            if trv_state["valve_position"] > 0:
-                any_valve_open = True
-            
-            if return_temp is None or return_temp < close_threshold:
-                all_return_temp_high = False
-        
-        if any_valve_open:
-            return {"status": "heating"}
-        elif all_return_temp_high:
-            return {"status": "return_temp_high"}
-        else:
-            return {"status": "waiting_for_cooldown"}
+        # Room needs heating - always return heating status
+        return {"status": "heating"}
     
     def _determine_trv_status_with_reason(self, trv_config: dict[str, Any], trv_state: dict[str, Any]) -> dict[str, str]:
         """Determine status and reason for individual TRV."""
