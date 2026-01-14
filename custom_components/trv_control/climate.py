@@ -135,6 +135,16 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     len(self._trvs),
                 )
                 await self._async_send_room_temperature_to_all_trvs(self._attr_current_temperature)
+                
+                # Also check and nudge any idle TRVs that should be heating
+                if self._attr_hvac_mode == HVACMode.HEAT and self._attr_target_temperature is not None:
+                    for trv in self._trvs:
+                        trv_id = trv[CONF_TRV]
+                        trv_state = self._trv_states[trv_id]
+                        
+                        # If valve is open but TRV might be idle, nudge it
+                        if trv_state["valve_position"] > 0:
+                            await self._async_nudge_trv_if_idle(trv_id, self._attr_target_temperature)
             else:
                 _LOGGER.warning("[%s] Cannot send temperature - sensor value not available yet", self._attr_name)
         
@@ -428,7 +438,10 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     trv_state["valve_control_active"] = True
 
     async def _async_nudge_trv_if_idle(self, trv_id: str, target_temp: float) -> None:
-        """Check if TRV is idle when it should be heating, and nudge setpoint if so."""
+        """Check if TRV is idle when it should be heating, and force it to use external sensor.
+        
+        Switches TRV to internal sensor then back to external to force re-evaluation.
+        """
         import asyncio
         
         device_name = trv_id.replace("climate.", "")
@@ -440,32 +453,61 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         ]
         
         running_state = None
+        trv_state = None
         for pattern in running_state_patterns:
             if state := self.hass.states.get(pattern):
                 # Check if it's a sensor with the state, or climate entity with attribute
                 if pattern.startswith("sensor."):
                     running_state = state.state
-                else:
+                elif pattern == trv_id:
+                    trv_state = state
                     running_state = state.attributes.get("running_state")
                 
                 if running_state:
                     break
         
-        # If TRV shows "idle" when we expect heating, nudge the setpoint
+        # Determine if we should nudge based on running state or hvac_action
+        should_nudge = False
+        
         if running_state and running_state.lower() == "idle":
+            should_nudge = True
+            _LOGGER.debug("TRV %s running_state is idle", trv_id)
+        elif trv_state and hasattr(trv_state, 'attributes'):
+            # Also check hvac_action attribute
+            hvac_action = trv_state.attributes.get("hvac_action")
+            if hvac_action and hvac_action.lower() == "idle":
+                should_nudge = True
+                _LOGGER.debug("TRV %s hvac_action is idle", trv_id)
+        
+        # If TRV shows "idle" when we expect heating, switch sensor mode
+        # This forces TRV to re-evaluate and start using external temperature
+        if should_nudge:
             _LOGGER.info(
-                "TRV %s shows idle when heating expected - nudging setpoint from %.1f\u00b0C to %.1f\u00b0C and back",
-                trv_id,
-                target_temp,
-                target_temp + 0.5
+                "TRV %s shows idle when heating expected - switching to internal sensor then back to external",
+                trv_id
             )
             
-            # Send target + 0.5\u00b0C
-            await self._async_send_temperature_to_trv(trv_id, target_temp + 0.5)
-            await asyncio.sleep(0.5)  # Wait briefly
-            
-            # Send back to actual target
-            await self._async_send_temperature_to_trv(trv_id, target_temp)
+            # Switch to internal sensor
+            sensor_select = f"select.{device_name}_sensor"
+            if self.hass.states.get(sensor_select):
+                await self.hass.services.async_call(
+                    "select",
+                    "select_option",
+                    {"entity_id": sensor_select, "option": "internal"},
+                    blocking=True
+                )
+                await asyncio.sleep(1)  # Wait for TRV to process
+                
+                # Switch back to external sensor
+                await self.hass.services.async_call(
+                    "select",
+                    "select_option",
+                    {"entity_id": sensor_select, "option": "external"},
+                    blocking=True
+                )
+                _LOGGER.info("TRV %s sensor switched back to external", trv_id)
+            else:
+                _LOGGER.warning("TRV %s sensor select entity not found: %s", trv_id, sensor_select)
 
     async def _async_set_valve_position(self, trv_id: str, position: int) -> None:
         """Set the valve position for a specific TRV."""
