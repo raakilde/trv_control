@@ -71,6 +71,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         | ClimateEntityFeature.TURN_ON
     )
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.OFF]
+    _attr_icon = "mdi:radiator"
 
     def __init__(self, config_entry: ConfigEntry, room_data: dict[str, Any]) -> None:
         """Initialize the climate device."""
