@@ -279,7 +279,11 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             self._unsub_temp_update()
 
     async def _async_control_valve(self, trv_config: dict[str, Any]) -> None:
-        """Control valve based on room temperature and return temperature for a specific TRV."""
+        """Control valve based on room temperature and return temperature for a specific TRV.
+        
+        Strategy: Set valve position and send actual target temperature.
+        If TRV shows idle when it should be heating, nudge setpoint by +0.5°C then back.
+        """
         trv_id = trv_config[CONF_TRV]
         trv_state = self._trv_states[trv_id]
         return_temp = trv_state["return_temp"]
@@ -291,7 +295,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         if self._window_open or self._attr_hvac_mode == HVACMode.OFF:
             return
         
-        # Failsafe: If return temp hasn't updated in 1 hour and room needs heating, open valve
+        # Failsafe: If return temp hasn't updated in 1 hour and room needs heating, force heating
         return_temp_last_updated = trv_state.get("return_temp_last_updated")
         failsafe_active = False
         if return_temp_last_updated:
@@ -306,12 +310,13 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     max_position = trv_config.get(CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION)
                     if trv_state["valve_position"] != max_position:
                         _LOGGER.warning(
-                            "Failsafe: Return temp for %s hasn't updated in %.0f minutes, room needs heating - forcing valve to %d%%",
+                            "Failsafe: Return temp for %s hasn't updated in %.0f minutes, room needs heating - forcing heating",
                             trv_id,
-                            time_since_update / 60,
-                            max_position
+                            time_since_update / 60
                         )
                         await self._async_set_valve_position(trv_id, max_position)
+                        await self._async_send_temperature_to_trv(trv_id, target_temp)
+                        await self._async_nudge_trv_if_idle(trv_id, target_temp)
                         trv_state["valve_control_active"] = True
                     failsafe_active = True
         
@@ -331,7 +336,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         if room_temp is not None and target_temp is not None:
             # Room has reached or exceeded target - close valve
             if room_temp >= target_temp:
-                if not trv_state["valve_control_active"]:
+                if trv_state["valve_position"] != 0:
                     _LOGGER.info(
                         "Room temp %.1f°C >= target %.1f°C, closing valve for TRV %s",
                         room_temp,
@@ -339,15 +344,17 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                         trv_id,
                     )
                     await self._async_set_valve_position(trv_id, 0)
+                    await self._async_send_temperature_to_trv(trv_id, target_temp)
                     trv_state["valve_control_active"] = True
             
             # Room is below target - check return temp before opening
             elif room_temp < target_temp:
                 # Safety check: close if return temp is too high
                 if return_temp >= close_threshold:
-                    _LOGGER.info(
-                        "Room temp %.1f°C < target %.1f°C, but return temp %.1f°C >= %.1f°C - closing valve for %s",
-                        room_temp,
+                    if trv_state["valve_position"] != 0:
+                        _LOGGER.info(
+                            "Room temp %.1f°C < target %.1f°C, but return temp %.1f°C >= %.1f°C - closing valve for %s",
+                            room_temp,
                         target_temp,
                         return_temp,
                         close_threshold,
@@ -355,6 +362,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     )
                     if not trv_state["valve_control_active"]:
                         await self._async_set_valve_position(trv_id, 0)
+                        await self._async_send_temperature_to_trv(trv_id, target_temp)
                         trv_state["valve_control_active"] = True
                 
                 # Open valve only when return temp is low enough
@@ -371,6 +379,8 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                             trv_id,
                         )
                         await self._async_set_valve_position(trv_id, max_position)
+                        await self._async_send_temperature_to_trv(trv_id, target_temp)
+                        await self._async_nudge_trv_if_idle(trv_id, target_temp)
                         trv_state["valve_control_active"] = True
                 # Between thresholds - maintain current state
                 else:
@@ -395,6 +405,8 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                         trv_id,
                     )
                     await self._async_set_valve_position(trv_id, 0)
+                    if target_temp is not None:
+                        await self._async_send_temperature_to_trv(trv_id, target_temp)
                     trv_state["valve_control_active"] = True
             
             # Open valve when temp drops below open threshold
@@ -409,7 +421,50 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                         trv_id,
                     )
                     await self._async_set_valve_position(trv_id, max_position)
+                    if target_temp is not None:
+                        await self._async_send_temperature_to_trv(trv_id, target_temp)
+                        await self._async_nudge_trv_if_idle(trv_id, target_temp)
                     trv_state["valve_control_active"] = True
+
+    async def _async_nudge_trv_if_idle(self, trv_id: str, target_temp: float) -> None:
+        """Check if TRV is idle when it should be heating, and nudge setpoint if so."""
+        import asyncio
+        
+        device_name = trv_id.replace("climate.", "")
+        
+        # Check TRV running_state
+        running_state_patterns = [
+            f"sensor.{device_name}_running_state",
+            f"{trv_id}",  # Climate entity itself might have running_state attribute
+        ]
+        
+        running_state = None
+        for pattern in running_state_patterns:
+            if state := self.hass.states.get(pattern):
+                # Check if it's a sensor with the state, or climate entity with attribute
+                if pattern.startswith("sensor."):
+                    running_state = state.state
+                else:
+                    running_state = state.attributes.get("running_state")
+                
+                if running_state:
+                    break
+        
+        # If TRV shows "idle" when we expect heating, nudge the setpoint
+        if running_state and running_state.lower() == "idle":
+            _LOGGER.info(
+                "TRV %s shows idle when heating expected - nudging setpoint from %.1f\u00b0C to %.1f\u00b0C and back",
+                trv_id,
+                target_temp,
+                target_temp + 0.5
+            )
+            
+            # Send target + 0.5\u00b0C
+            await self._async_send_temperature_to_trv(trv_id, target_temp + 0.5)
+            await asyncio.sleep(0.5)  # Wait briefly
+            
+            # Send back to actual target
+            await self._async_send_temperature_to_trv(trv_id, target_temp)
 
     async def _async_set_valve_position(self, trv_id: str, position: int) -> None:
         """Set the valve position for a specific TRV."""
@@ -585,9 +640,6 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     },
                     blocking=False,
                 )
-            
-            # Step 3: Also send target temperature setpoint
-            await self._async_send_temperature_to_trv(trv_id, self._attr_target_temperature)
                 
         except Exception as e:
             _LOGGER.error("Failed to send room temperature to %s: %s", trv_id, e)
@@ -616,8 +668,10 @@ class TRVClimate(ClimateEntity, RestoreEntity):
 
         self._attr_target_temperature = temperature
         
-        # Send target temperature to all TRVs
-        await self._async_send_temperature_to_all_trvs(temperature)
+        # Trigger valve control for all TRVs to re-evaluate with new target
+        # Valve control will send appropriate setpoint (5°C or 35°C) based on logic
+        for trv in self._trvs:
+            await self._async_control_valve(trv)
         
         self.async_write_ha_state()
 
