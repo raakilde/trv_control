@@ -1,7 +1,7 @@
 {
   "image": "mcr.microsoft.com/devcontainers/python:3.13-bookworm",
   "name": "TRV Control development",
-  "initializeCommand": "/bin/mkdir -p ${localWorkspaceFolder}/.haconfig && /bin/cp ${localWorkspaceFolder}/.devcontainer/configuration.yaml ${localWorkspaceFolder}/.haconfig",
+  "initializeCommand": "/bin/mkdir -p ${localWorkspaceFolder}/.haconfig && /bin/mkdir -p ${localWorkspaceFolder}/.haconfig/www && /bin/cp ${localWorkspaceFolder}/.devcontainer/configuration.yaml ${localWorkspaceFolder}/.haconfig && /bin/cp ${localWorkspaceFolder}/www/trv-control-card.js ${localWorkspaceFolder}/.haconfig/www/",
   "containerUser": "1000",
   "remoteUser": "1000",
   "appPort": [

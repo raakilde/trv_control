@@ -1,10 +1,41 @@
 default_config:
 
+frontend:
+  extra_module_url:
+    - /local/www/trv-control-card.js
+
 logger:
   default: INFO
   logs:
     custom_components.trv_control: debug
     homeassistant.components.climate: debug
+
+# ============================================================
+# TRV Control Integration Setup Instructions
+# ============================================================
+# This configuration creates test entities for the TRV Control integration.
+# After starting Home Assistant, configure the integration via UI:
+#
+# 1. Go to: Settings → Devices & Services → Add Integration
+# 2. Search for "TRV Control"
+# 3. Add a room with these entities:
+#
+#    Room Name: Living Room Test
+#    Temperature Sensor: sensor.living_room_temperature_sensor
+#    TRV 1: climate.living_room_trv
+#    TRV 1 Return Temp: sensor.living_room_return_temperature_sensor
+#    TRV 1 Max Valve Position: 100
+#    Window Sensor: binary_sensor.living_room_window_sensor
+#    Return Temp Close: 32.0
+#    Return Temp Open: 30.0
+#
+# You can also add a second room:
+#    Room Name: Bedroom Test
+#    Temperature Sensor: sensor.bedroom_temperature_sensor
+#    TRV 1: climate.bedroom_trv
+#    TRV 1 Return Temp: sensor.bedroom_return_temperature_sensor
+#    Window Sensor: binary_sensor.bedroom_window_sensor
+# ============================================================
 
 # Input helpers for testing TRV Control
 input_boolean:
