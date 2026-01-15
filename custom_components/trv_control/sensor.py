@@ -1,4 +1,5 @@
 """Sensor platform for TRV Control integration."""
+
 from __future__ import annotations
 
 import logging
@@ -26,54 +27,72 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up TRV Control sensors from a config entry."""
+    _LOGGER.info("Sensor platform setup starting for entry %s", config_entry.entry_id)
+    _LOGGER.debug("DOMAIN data keys: %s", list(hass.data.get(DOMAIN, {}).keys()))
+
     # Get the climate entity from the domain data
-    climate_entity = hass.data[DOMAIN][config_entry.entry_id]
-    
+    climate_entity = hass.data.get(DOMAIN, {}).get(config_entry.entry_id)
+
     if not climate_entity:
-        _LOGGER.error("Could not find climate entity for config entry %s", config_entry.entry_id)
+        _LOGGER.error(
+            "Could not find climate entity for config entry %s. Available entries: %s",
+            config_entry.entry_id,
+            list(hass.data.get(DOMAIN, {}).keys()),
+        )
         return
-    
-    _LOGGER.info("Setting up sensors for %s", climate_entity.name)
-    
+
+    _LOGGER.info(
+        "Setting up sensors for %s (has %d TRVs)",
+        climate_entity.name,
+        len(climate_entity._trvs),
+    )
+
     sensors = []
-    
+
     # Add sensors for each TRV
     for idx, trv in enumerate(climate_entity._trvs):
-        trv_name = trv.get('name', f"TRV {idx + 1}")
-        base_name = config_entry.data['name']
-        
-        sensors.extend([
-            TRVValvePositionSensor(climate_entity, trv, base_name, trv_name),
-            TRVReturnTempSensor(climate_entity, trv, base_name, trv_name),
-        ])
-    
+        trv_name = trv.get("name", f"TRV {idx + 1}")
+        base_name = config_entry.data["name"]
+
+        sensors.extend(
+            [
+                TRVValvePositionSensor(climate_entity, trv, base_name, trv_name),
+                TRVReturnTempSensor(climate_entity, trv, base_name, trv_name),
+            ]
+        )
+
     # Add overall control sensors
-    sensors.extend([
-        HeatingStatusSensor(climate_entity, config_entry.data['name']),
-        TargetTempDifferenceSensor(climate_entity, config_entry.data['name']),
-        AverageValvePositionSensor(climate_entity, config_entry.data['name']),
-        HeatingDemandSensor(climate_entity, config_entry.data['name']),
-        ControlEfficiencySensor(climate_entity, config_entry.data['name']),
-        TemperatureTrendSensor(climate_entity, config_entry.data['name']),
-        ReturnTempDeltaSensor(climate_entity, config_entry.data['name']),
-    ])
-    
+    sensors.extend(
+        [
+            HeatingStatusSensor(climate_entity, config_entry.data["name"]),
+            TargetTempDifferenceSensor(climate_entity, config_entry.data["name"]),
+            AverageValvePositionSensor(climate_entity, config_entry.data["name"]),
+            HeatingDemandSensor(climate_entity, config_entry.data["name"]),
+            ControlEfficiencySensor(climate_entity, config_entry.data["name"]),
+            TemperatureTrendSensor(climate_entity, config_entry.data["name"]),
+            ReturnTempDeltaSensor(climate_entity, config_entry.data["name"]),
+        ]
+    )
+
     # Add per-TRV diagnostic sensors
     for idx, trv in enumerate(climate_entity._trvs):
-        trv_name = trv.get('name', f"TRV {idx + 1}")
-        base_name = config_entry.data['name']
-        sensors.append(
-            TRVHealthSensor(climate_entity, trv, base_name, trv_name)
-        )
-    
+        trv_name = trv.get("name", f"TRV {idx + 1}")
+        base_name = config_entry.data["name"]
+        sensors.append(TRVHealthSensor(climate_entity, trv, base_name, trv_name))
+
+    _LOGGER.info("Adding %d sensors to Home Assistant", len(sensors))
+    for sensor in sensors:
+        _LOGGER.debug("  - %s (unique_id: %s)", sensor.name, sensor.unique_id)
+
     async_add_entities(sensors)
+    _LOGGER.info("Sensor platform setup complete")
 
 
 class TRVControlSensorBase(SensorEntity):
     """Base class for TRV Control sensors."""
-    
+
     _attr_should_poll = False
-    
+
     def __init__(self, climate_entity, name: str):
         """Initialize the sensor."""
         self._climate_entity = climate_entity
@@ -82,13 +101,14 @@ class TRVControlSensorBase(SensorEntity):
             "identifiers": {(DOMAIN, climate_entity.unique_id)},
             "name": climate_entity.name,
         }
-    
+
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""
+
         @callback
         def _update(event=None):
             self.async_schedule_update_ha_state(True)
-        
+
         # Update when climate entity updates
         self.async_on_remove(
             async_track_state_change_event(
@@ -101,26 +121,26 @@ class TRVControlSensorBase(SensorEntity):
 
 class TRVValvePositionSensor(TRVControlSensorBase):
     """Sensor for TRV valve position."""
-    
+
     _attr_device_class = None
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_icon = "mdi:pipe-valve"
-    
+
     def __init__(self, climate_entity, trv: dict, base_name: str, trv_name: str):
         """Initialize the sensor."""
         self._trv = trv
-        self._trv_id = trv['trv']
+        self._trv_id = trv["trv"]
         super().__init__(climate_entity, f"{base_name} {trv_name} Valve Position")
         self._attr_unique_id = f"{climate_entity.unique_id}_{trv_name.lower().replace(' ', '_')}_valve_position"
-    
+
     @property
     def native_value(self) -> int | None:
         """Return the valve position."""
         if self._trv_id in self._climate_entity._trv_states:
             return self._climate_entity._trv_states[self._trv_id].get("valve_position")
         return None
-    
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional attributes."""
@@ -136,25 +156,25 @@ class TRVValvePositionSensor(TRVControlSensorBase):
 
 class TRVReturnTempSensor(TRVControlSensorBase):
     """Sensor for TRV return temperature."""
-    
+
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-    
+
     def __init__(self, climate_entity, trv: dict, base_name: str, trv_name: str):
         """Initialize the sensor."""
         self._trv = trv
-        self._trv_id = trv['trv']
+        self._trv_id = trv["trv"]
         super().__init__(climate_entity, f"{base_name} {trv_name} Return Temperature")
         self._attr_unique_id = f"{climate_entity.unique_id}_{trv_name.lower().replace(' ', '_')}_return_temp"
-    
+
     @property
     def native_value(self) -> float | None:
         """Return the return temperature."""
         if self._trv_id in self._climate_entity._trv_states:
             return self._climate_entity._trv_states[self._trv_id].get("return_temp")
         return None
-    
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional attributes."""
@@ -166,19 +186,19 @@ class TRVReturnTempSensor(TRVControlSensorBase):
 
 class HeatingStatusSensor(TRVControlSensorBase):
     """Sensor for overall heating status."""
-    
+
     _attr_icon = "mdi:radiator"
-    
+
     def __init__(self, climate_entity, name: str):
         """Initialize the sensor."""
         super().__init__(climate_entity, f"{name} Heating Status")
         self._attr_unique_id = f"{climate_entity.unique_id}_heating_status"
-    
+
     @property
     def native_value(self) -> str:
         """Return the heating status."""
         return getattr(self._climate_entity, "_heating_status", "unknown")
-    
+
     @property
     def icon(self) -> str:
         """Return icon based on status."""
@@ -196,17 +216,17 @@ class HeatingStatusSensor(TRVControlSensorBase):
 
 class TargetTempDifferenceSensor(TRVControlSensorBase):
     """Sensor for temperature difference from target."""
-    
+
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
     _attr_icon = "mdi:thermometer-lines"
-    
+
     def __init__(self, climate_entity, name: str):
         """Initialize the sensor."""
         super().__init__(climate_entity, f"{name} Temperature Difference")
         self._attr_unique_id = f"{climate_entity.unique_id}_temp_difference"
-    
+
     @property
     def native_value(self) -> float | None:
         """Return the temperature difference (current - target)."""
@@ -215,7 +235,7 @@ class TargetTempDifferenceSensor(TRVControlSensorBase):
         if current is not None and target is not None:
             return round(current - target, 1)
         return None
-    
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional attributes."""
@@ -227,17 +247,17 @@ class TargetTempDifferenceSensor(TRVControlSensorBase):
 
 class AverageValvePositionSensor(TRVControlSensorBase):
     """Sensor for average valve position across all TRVs."""
-    
+
     _attr_device_class = None
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_icon = "mdi:percent"
-    
+
     def __init__(self, climate_entity, name: str):
         """Initialize the sensor."""
         super().__init__(climate_entity, f"{name} Average Valve Position")
         self._attr_unique_id = f"{climate_entity.unique_id}_avg_valve_position"
-    
+
     @property
     def native_value(self) -> float | None:
         """Return the average valve position."""
@@ -246,48 +266,50 @@ class AverageValvePositionSensor(TRVControlSensorBase):
             valve_pos = state.get("valve_position")
             if valve_pos is not None:
                 positions.append(valve_pos)
-        
+
         if positions:
             return round(sum(positions) / len(positions), 1)
         return None
-    
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional attributes."""
         positions = {}
         for trv in self._climate_entity._trvs:
-            trv_id = trv['trv']
+            trv_id = trv["trv"]
             if trv_id in self._climate_entity._trv_states:
-                trv_name = trv.get('name', trv_id.split('.')[-1])
-                positions[trv_name] = self._climate_entity._trv_states[trv_id].get("valve_position")
+                trv_name = trv.get("name", trv_id.split(".")[-1])
+                positions[trv_name] = self._climate_entity._trv_states[trv_id].get(
+                    "valve_position"
+                )
         return {"individual_positions": positions}
 
 
 class HeatingDemandSensor(TRVControlSensorBase):
     """Sensor showing if any TRV is calling for heat."""
-    
+
     _attr_icon = "mdi:fire-alert"
-    
+
     def __init__(self, climate_entity, name: str):
         """Initialize the sensor."""
         super().__init__(climate_entity, f"{name} Heating Demand")
         self._attr_unique_id = f"{climate_entity.unique_id}_heating_demand"
-    
+
     @property
     def native_value(self) -> str:
         """Return heating demand status."""
         current = self._climate_entity.current_temperature
         target = self._climate_entity.target_temperature
-        
+
         if current is None or target is None:
             return "unknown"
-        
+
         # Check if any valve is open
         any_open = any(
-            state.get("valve_position", 0) > 0 
+            state.get("valve_position", 0) > 0
             for state in self._climate_entity._trv_states.values()
         )
-        
+
         if current < target and any_open:
             return "heating"
         elif current < target and not any_open:
@@ -295,7 +317,7 @@ class HeatingDemandSensor(TRVControlSensorBase):
         elif current >= target:
             return "no_demand"
         return "unknown"
-    
+
     @property
     def icon(self) -> str:
         """Return icon based on demand."""
@@ -306,22 +328,25 @@ class HeatingDemandSensor(TRVControlSensorBase):
         elif self.native_value == "no_demand":
             return "mdi:fire-off"
         return "mdi:help-circle"
-    
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional attributes."""
         open_valves = sum(
-            1 for state in self._climate_entity._trv_states.values() 
+            1
+            for state in self._climate_entity._trv_states.values()
             if state.get("valve_position", 0) > 0
         )
         total_valves = len(self._climate_entity._trv_states)
-        
+
         return {
             "open_valves": open_valves,
             "total_valves": total_valves,
             "temperature_below_target": (
-                self._climate_entity.current_temperature < self._climate_entity.target_temperature
-                if self._climate_entity.current_temperature and self._climate_entity.target_temperature
+                self._climate_entity.current_temperature
+                < self._climate_entity.target_temperature
+                if self._climate_entity.current_temperature
+                and self._climate_entity.target_temperature
                 else None
             ),
         }
@@ -329,26 +354,26 @@ class HeatingDemandSensor(TRVControlSensorBase):
 
 class ControlEfficiencySensor(TRVControlSensorBase):
     """Sensor for control efficiency (how close to target)."""
-    
+
     _attr_device_class = None
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_icon = "mdi:chart-line"
-    
+
     def __init__(self, climate_entity, name: str):
         """Initialize the sensor."""
         super().__init__(climate_entity, f"{name} Control Efficiency")
         self._attr_unique_id = f"{climate_entity.unique_id}_control_efficiency"
-    
+
     @property
     def native_value(self) -> float | None:
         """Return control efficiency (100% = perfect, lower = further from target)."""
         current = self._climate_entity.current_temperature
         target = self._climate_entity.target_temperature
-        
+
         if current is None or target is None:
             return None
-        
+
         # Calculate efficiency: 100% when within 0.5°C, decreases with distance
         diff = abs(current - target)
         if diff <= 0.5:
@@ -363,7 +388,7 @@ class ControlEfficiencySensor(TRVControlSensorBase):
             return 50.0
         else:
             return max(0, 100 - (diff * 20))
-    
+
     @property
     def icon(self) -> str:
         """Return icon based on efficiency."""
@@ -378,52 +403,52 @@ class ControlEfficiencySensor(TRVControlSensorBase):
             return "mdi:alert"
         else:
             return "mdi:alert-circle"
-    
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional attributes."""
         current = self._climate_entity.current_temperature
         target = self._climate_entity.target_temperature
-        
+
         attrs = {
             "current_temperature": current,
             "target_temperature": target,
         }
-        
+
         if current and target:
             attrs["temperature_difference"] = round(abs(current - target), 1)
             attrs["within_0_5_degrees"] = abs(current - target) <= 0.5
             attrs["within_1_degree"] = abs(current - target) <= 1.0
-        
+
         return attrs
 
 
 class TemperatureTrendSensor(TRVControlSensorBase):
     """Sensor showing temperature trend (rising/falling/stable)."""
-    
+
     _attr_icon = "mdi:chart-line-variant"
-    
+
     def __init__(self, climate_entity, name: str):
         """Initialize the sensor."""
         super().__init__(climate_entity, name + " Temperature Trend")
         self._attr_unique_id = f"{climate_entity.unique_id}_temp_trend"
         self._previous_temp = None
         self._trend_count = 0
-    
+
     @property
     def native_value(self) -> str:
         """Return temperature trend."""
         current = self._climate_entity.current_temperature
-        
+
         if current is None:
             return "unknown"
-        
+
         if self._previous_temp is None:
             self._previous_temp = current
             return "stable"
-        
+
         diff = current - self._previous_temp
-        
+
         if abs(diff) < 0.1:
             trend = "stable"
             self._trend_count = 0
@@ -433,10 +458,10 @@ class TemperatureTrendSensor(TRVControlSensorBase):
         else:
             trend = "falling"
             self._trend_count = self._trend_count - 1 if self._trend_count < 0 else -1
-        
+
         self._previous_temp = current
         return trend
-    
+
     @property
     def icon(self) -> str:
         """Return icon based on trend."""
@@ -447,75 +472,76 @@ class TemperatureTrendSensor(TRVControlSensorBase):
         elif self.native_value == "stable":
             return "mdi:trending-neutral"
         return "mdi:help-circle"
-    
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional attributes."""
         current = self._climate_entity.current_temperature
         target = self._climate_entity.target_temperature
-        
+
         attrs = {
             "current_temperature": current,
             "previous_temperature": self._previous_temp,
         }
-        
+
         if current and self._previous_temp:
             attrs["change"] = round(current - self._previous_temp, 2)
-        
+
         if current and target:
             attrs["needs_heating"] = current < target
             attrs["approaching_target"] = (
-                (current < target and self.native_value == "rising") or
-                (current > target and self.native_value == "falling")
-            )
-        
+                current < target and self.native_value == "rising"
+            ) or (current > target and self.native_value == "falling")
+
         return attrs
 
 
 class ReturnTempDeltaSensor(TRVControlSensorBase):
     """Sensor showing temperature delta between room and return pipes."""
-    
+
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
     _attr_icon = "mdi:delta"
-    
+
     def __init__(self, climate_entity, name: str):
         """Initialize the sensor."""
         super().__init__(climate_entity, f"{name} Return Temperature Delta")
         self._attr_unique_id = f"{climate_entity.unique_id}_return_temp_delta"
-    
+
     @property
     def native_value(self) -> float | None:
         """Return average return temp delta."""
         current = self._climate_entity.current_temperature
         if current is None:
             return None
-        
+
         deltas = []
         for state in self._climate_entity._trv_states.values():
             return_temp = state.get("return_temp")
             if return_temp is not None:
                 deltas.append(return_temp - current)
-        
+
         if deltas:
             return round(sum(deltas) / len(deltas), 1)
         return None
-    
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional attributes."""
         current = self._climate_entity.current_temperature
         deltas = {}
-        
+
         for trv in self._climate_entity._trvs:
-            trv_id = trv['trv']
+            trv_id = trv["trv"]
             if trv_id in self._climate_entity._trv_states:
-                return_temp = self._climate_entity._trv_states[trv_id].get("return_temp")
+                return_temp = self._climate_entity._trv_states[trv_id].get(
+                    "return_temp"
+                )
                 if return_temp and current:
-                    trv_name = trv.get('name', trv_id.split('.')[-1])
+                    trv_name = trv.get("name", trv_id.split(".")[-1])
                     deltas[trv_name] = round(return_temp - current, 1)
-        
+
         return {
             "individual_deltas": deltas,
             "room_temperature": current,
@@ -524,48 +550,50 @@ class ReturnTempDeltaSensor(TRVControlSensorBase):
 
 class TRVHealthSensor(TRVControlSensorBase):
     """Sensor for TRV health/responsiveness."""
-    
+
     _attr_icon = "mdi:heart-pulse"
-    
+
     def __init__(self, climate_entity, trv: dict, base_name: str, trv_name: str):
         """Initialize the sensor."""
         self._trv = trv
-        self._trv_id = trv['trv']
+        self._trv_id = trv["trv"]
         super().__init__(climate_entity, f"{base_name} {trv_name} Health")
-        self._attr_unique_id = f"{climate_entity.unique_id}_{trv_name.lower().replace(' ', '_')}_health"
-    
+        self._attr_unique_id = (
+            f"{climate_entity.unique_id}_{trv_name.lower().replace(' ', '_')}_health"
+        )
+
     @property
     def native_value(self) -> str:
         """Return health status."""
         if self._trv_id not in self._climate_entity._trv_states:
             return "unknown"
-        
+
         state = self._climate_entity._trv_states[self._trv_id]
         valve_pos = state.get("valve_position")
         return_temp = state.get("return_temp")
         valve_active = state.get("valve_control_active", False)
-        
+
         # Check if data is stale (would need to implement last_updated tracking)
         if valve_pos is None or return_temp is None:
             return "no_data"
-        
+
         if not valve_active:
             return "control_disabled"
-        
+
         # Check if valve seems stuck
         current = self._climate_entity.current_temperature
         target = self._climate_entity.target_temperature
-        
+
         if current and target and current < target - 1.0 and valve_pos == 0:
             return "possibly_stuck_closed"
-        
+
         if return_temp and current and valve_pos > 0:
             delta = return_temp - current
             if delta < 1.0:  # Return pipe should be warmer when heating
                 return "possibly_stuck_open"
-        
+
         return "healthy"
-    
+
     @property
     def icon(self) -> str:
         """Return icon based on health."""
@@ -579,7 +607,7 @@ class TRVHealthSensor(TRVControlSensorBase):
         elif status == "control_disabled":
             return "mdi:power-off"
         return "mdi:help-circle"
-    
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional attributes."""
