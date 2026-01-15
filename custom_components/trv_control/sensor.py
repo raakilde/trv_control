@@ -28,16 +28,17 @@ async def async_setup_entry(
 ) -> None:
     """Set up TRV Control sensors from a config entry."""
     _LOGGER.info("Sensor platform setup starting for entry %s", config_entry.entry_id)
-    _LOGGER.debug("DOMAIN data keys: %s", list(hass.data.get(DOMAIN, {}).keys()))
-
+    
+    # Wait for climate platform to be ready
+    await hass.async_block_till_done()
+    
     # Get the climate entity from the domain data
     climate_entity = hass.data.get(DOMAIN, {}).get(config_entry.entry_id)
 
     if not climate_entity:
         _LOGGER.error(
-            "Could not find climate entity for config entry %s. Available entries: %s",
+            "Could not find climate entity for config entry %s",
             config_entry.entry_id,
-            list(hass.data.get(DOMAIN, {}).keys()),
         )
         return
 
@@ -47,12 +48,14 @@ async def async_setup_entry(
         len(climate_entity._trvs),
     )
 
+    # Use the climate entity's room name as the base name
+    base_name = climate_entity._room_name
+
     sensors = []
 
     # Add sensors for each TRV
     for idx, trv in enumerate(climate_entity._trvs):
         trv_name = trv.get("name", f"TRV {idx + 1}")
-        base_name = config_entry.data["name"]
 
         sensors.extend(
             [
@@ -64,20 +67,19 @@ async def async_setup_entry(
     # Add overall control sensors
     sensors.extend(
         [
-            HeatingStatusSensor(climate_entity, config_entry.data["name"]),
-            TargetTempDifferenceSensor(climate_entity, config_entry.data["name"]),
-            AverageValvePositionSensor(climate_entity, config_entry.data["name"]),
-            HeatingDemandSensor(climate_entity, config_entry.data["name"]),
-            ControlEfficiencySensor(climate_entity, config_entry.data["name"]),
-            TemperatureTrendSensor(climate_entity, config_entry.data["name"]),
-            ReturnTempDeltaSensor(climate_entity, config_entry.data["name"]),
+            HeatingStatusSensor(climate_entity, base_name),
+            TargetTempDifferenceSensor(climate_entity, base_name),
+            AverageValvePositionSensor(climate_entity, base_name),
+            HeatingDemandSensor(climate_entity, base_name),
+            ControlEfficiencySensor(climate_entity, base_name),
+            TemperatureTrendSensor(climate_entity, base_name),
+            ReturnTempDeltaSensor(climate_entity, base_name),
         ]
     )
 
     # Add per-TRV diagnostic sensors
     for idx, trv in enumerate(climate_entity._trvs):
         trv_name = trv.get("name", f"TRV {idx + 1}")
-        base_name = config_entry.data["name"]
         sensors.append(TRVHealthSensor(climate_entity, trv, base_name, trv_name))
 
     _LOGGER.info("Adding %d sensors to Home Assistant", len(sensors))
