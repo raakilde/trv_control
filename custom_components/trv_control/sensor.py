@@ -26,21 +26,14 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up TRV Control sensors from a config entry."""
-    climate_entity_id = f"climate.{config_entry.data['name'].lower().replace(' ', '_')}"
-    
-    # Wait for climate entity to be ready
-    await hass.async_block_till_done()
-    
-    # Get the climate entity
-    climate_entity = None
-    for entity in hass.data[DOMAIN].values():
-        if hasattr(entity, 'entity_id') and entity.entity_id == climate_entity_id:
-            climate_entity = entity
-            break
+    # Get the climate entity from the domain data
+    climate_entity = hass.data[DOMAIN][config_entry.entry_id]
     
     if not climate_entity:
-        _LOGGER.warning("Could not find climate entity %s for sensors", climate_entity_id)
+        _LOGGER.error("Could not find climate entity for config entry %s", config_entry.entry_id)
         return
+    
+    _LOGGER.info("Setting up sensors for %s", climate_entity.name)
     
     sensors = []
     
