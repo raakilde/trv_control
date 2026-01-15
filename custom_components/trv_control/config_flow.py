@@ -493,14 +493,33 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             room_name = user_input["room"]
             _LOGGER.info("Removing room: %s", room_name)
 
-            # Delete the entity from registry before removing the room
+            # Delete all entities from registry before removing the room
             entity_reg = er.async_get(self.hass)
-            unique_id = (
+            unique_id_prefix = (
                 f"{self.config_entry.entry_id}_{room_name.lower().replace(' ', '_')}"
             )
-            entity_id = entity_reg.async_get_entity_id("climate", DOMAIN, unique_id)
+
+            # Remove climate entity
+            entity_id = entity_reg.async_get_entity_id(
+                "climate", DOMAIN, unique_id_prefix
+            )
             if entity_id:
-                _LOGGER.info("Removing entity %s from registry", entity_id)
+                _LOGGER.info("Removing climate entity %s from registry", entity_id)
+                entity_reg.async_remove(entity_id)
+
+            # Remove all sensor entities for this room
+            # Find all entities that start with the unique_id_prefix
+            entities_to_remove = []
+            for entity in entity_reg.entities.values():
+                if (
+                    entity.platform == DOMAIN
+                    and entity.unique_id
+                    and entity.unique_id.startswith(unique_id_prefix)
+                ):
+                    entities_to_remove.append(entity.entity_id)
+
+            for entity_id in entities_to_remove:
+                _LOGGER.info("Removing sensor entity %s from registry", entity_id)
                 entity_reg.async_remove(entity_id)
 
             rooms = [room for room in rooms if room[CONF_ROOM_NAME] != room_name]

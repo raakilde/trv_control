@@ -136,13 +136,28 @@ class TRVControlSensorBase(SensorEntity):
             self.async_schedule_update_ha_state(True)
 
         # Update when climate entity updates
-        self.async_on_remove(
-            async_track_state_change_event(
-                self.hass,
-                self._climate_entity.entity_id,
-                _update,
+        if (
+            hasattr(self._climate_entity, "entity_id")
+            and self._climate_entity.entity_id
+        ):
+            self.async_on_remove(
+                async_track_state_change_event(
+                    self.hass,
+                    self._climate_entity.entity_id,
+                    _update,
+                )
             )
-        )
+        else:
+            _LOGGER.warning(
+                "Climate entity %s does not have entity_id yet, sensor %s may not update",
+                self._climate_entity.name
+                if hasattr(self._climate_entity, "name")
+                else "unknown",
+                self.name,
+            )
+
+        # Trigger initial update
+        self.async_schedule_update_ha_state(True)
 
 
 class TRVValvePositionSensor(TRVControlSensorBase):
