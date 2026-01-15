@@ -29,15 +29,19 @@ async def async_setup_entry(
     """Set up TRV Control sensors from a config entry."""
     _LOGGER.info("Sensor platform setup starting for entry %s", config_entry.entry_id)
     
-    # Wait for climate platform to be ready
-    await hass.async_block_till_done()
+    # Retry logic to wait for climate entity to be available
+    import asyncio
+    climate_entity = None
+    for attempt in range(10):  # Try for up to 5 seconds
+        climate_entity = hass.data.get(DOMAIN, {}).get(config_entry.entry_id)
+        if climate_entity:
+            break
+        _LOGGER.debug("Climate entity not yet available, waiting... (attempt %d/10)", attempt + 1)
+        await asyncio.sleep(0.5)
     
-    # Get the climate entity from the domain data
-    climate_entity = hass.data.get(DOMAIN, {}).get(config_entry.entry_id)
-
     if not climate_entity:
         _LOGGER.error(
-            "Could not find climate entity for config entry %s",
+            "Could not find climate entity for config entry %s after waiting",
             config_entry.entry_id,
         )
         return

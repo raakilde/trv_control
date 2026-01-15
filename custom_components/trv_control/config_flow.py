@@ -1,36 +1,36 @@
 """Config flow for TRV Control integration."""
+
 from __future__ import annotations
 
 import logging
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import selector
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import selector
 
 from .const import (
-    DOMAIN,
-    CONF_ROOMS,
+    CONF_MAX_VALVE_POSITION,
+    CONF_RETURN_TEMP,
+    CONF_RETURN_TEMP_CLOSE,
+    CONF_RETURN_TEMP_OPEN,
     CONF_ROOM_NAME,
+    CONF_ROOMS,
     CONF_TEMP_SENSOR,
     CONF_TRV,
     CONF_TRVS,
-    CONF_RETURN_TEMP,
     CONF_WINDOW_SENSOR,
-    CONF_RETURN_TEMP_CLOSE,
-    CONF_RETURN_TEMP_OPEN,
-    CONF_MAX_VALVE_POSITION,
+    DEFAULT_MAX_VALVE_POSITION,
     DEFAULT_RETURN_TEMP_CLOSE,
     DEFAULT_RETURN_TEMP_OPEN,
-    DEFAULT_MAX_VALVE_POSITION,
+    DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
 
 def get_room_schema() -> vol.Schema:
     """Get schema for adding a room."""
@@ -41,10 +41,13 @@ def get_room_schema() -> vol.Schema:
                 selector.EntitySelectorConfig(domain="sensor")
             ),
             vol.Optional(CONF_WINDOW_SENSOR): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="binary_sensor", device_class=["window", "door", "opening"])
+                selector.EntitySelectorConfig(
+                    domain="binary_sensor", device_class=["window", "door", "opening"]
+                )
             ),
         }
     )
+
 
 def get_trv_schema() -> vol.Schema:
     """Get schema for adding a TRV to a room."""
@@ -56,14 +59,26 @@ def get_trv_schema() -> vol.Schema:
             vol.Required(CONF_RETURN_TEMP): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             ),
-            vol.Optional(CONF_RETURN_TEMP_CLOSE, default=DEFAULT_RETURN_TEMP_CLOSE): selector.NumberSelector(
-                selector.NumberSelectorConfig(min=20, max=80, step=0.5, unit_of_measurement="°C")
+            vol.Optional(
+                CONF_RETURN_TEMP_CLOSE, default=DEFAULT_RETURN_TEMP_CLOSE
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=20, max=80, step=0.5, unit_of_measurement="°C"
+                )
             ),
-            vol.Optional(CONF_RETURN_TEMP_OPEN, default=DEFAULT_RETURN_TEMP_OPEN): selector.NumberSelector(
-                selector.NumberSelectorConfig(min=20, max=80, step=0.5, unit_of_measurement="°C")
+            vol.Optional(
+                CONF_RETURN_TEMP_OPEN, default=DEFAULT_RETURN_TEMP_OPEN
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=20, max=80, step=0.5, unit_of_measurement="°C"
+                )
             ),
-            vol.Optional(CONF_MAX_VALVE_POSITION, default=DEFAULT_MAX_VALVE_POSITION): selector.NumberSelector(
-                selector.NumberSelectorConfig(min=0, max=100, step=1, unit_of_measurement="%")
+            vol.Optional(
+                CONF_MAX_VALVE_POSITION, default=DEFAULT_MAX_VALVE_POSITION
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=100, step=1, unit_of_measurement="%"
+                )
             ),
         }
     )
@@ -108,12 +123,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         super().__init__()
         self._config_entry = config_entry
         self._selected_room: str | None = None
-    
+
     @property
     def config_entry(self) -> config_entries.ConfigEntry:
         """Return the config entry."""
         return self._config_entry
-    
+
     def _get_rooms(self) -> list:
         """Get rooms from options or data."""
         # Always prefer options if available
@@ -121,7 +136,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             return self.config_entry.options[CONF_ROOMS]
         # Fall back to data
         return self.config_entry.data.get(CONF_ROOMS, [])
-    
+
     def _save_rooms(self, rooms: list) -> None:
         """Save rooms to options."""
         _LOGGER.debug("Saving %d rooms to config entry options", len(rooms))
@@ -130,13 +145,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         for room in rooms_copy:
             if CONF_TRVS in room:
                 room[CONF_TRVS] = [dict(trv) for trv in room[CONF_TRVS]]
-        
+
         _LOGGER.debug("Calling async_update_entry with %d rooms", len(rooms_copy))
         self.hass.config_entries.async_update_entry(
             self.config_entry,
             options={**self.config_entry.options, CONF_ROOMS: rooms_copy},
         )
-        _LOGGER.debug("Config entry updated - options now has %d rooms", len(self.config_entry.options.get(CONF_ROOMS, [])))
+        _LOGGER.debug(
+            "Config entry updated - options now has %d rooms",
+            len(self.config_entry.options.get(CONF_ROOMS, [])),
+        )
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -157,7 +175,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             try:
                 rooms = self._get_rooms()
                 room_name = user_input[CONF_ROOM_NAME]
-                
+
                 # Check if room already exists
                 if any(room[CONF_ROOM_NAME] == room_name for room in rooms):
                     errors["base"] = "room_exists"
@@ -170,13 +188,18 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         CONF_TRVS: [],  # Empty list of TRVs
                     }
                     rooms.append(room_config)
-                    
+
                     self._save_rooms(rooms)
-                    
-                    await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-                    
+
+                    # Schedule reload instead of awaiting it
+                    self.hass.async_create_task(
+                        self.hass.config_entries.async_reload(
+                            self.config_entry.entry_id
+                        )
+                    )
+
                     return self.async_create_entry(title="", data={})
-                    
+
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
@@ -192,7 +215,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Select a room to manage."""
         rooms = self._get_rooms()
-        
+
         if not rooms:
             return self.async_abort(reason="no_rooms")
 
@@ -201,7 +224,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             return await self.async_step_room_options()
 
         room_names = [room[CONF_ROOM_NAME] for room in rooms]
-        
+
         return self.async_show_form(
             step_id="manage_room",
             data_schema=vol.Schema(
@@ -229,30 +252,39 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             try:
                 rooms = self._get_rooms()
-                
+
                 # Find the selected room
                 for room in rooms:
                     if room[CONF_ROOM_NAME] == self._selected_room:
                         trv_config = {
                             CONF_TRV: user_input[CONF_TRV],
                             CONF_RETURN_TEMP: user_input[CONF_RETURN_TEMP],
-                            CONF_RETURN_TEMP_CLOSE: user_input.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE),
-                            CONF_RETURN_TEMP_OPEN: user_input.get(CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN),
-                            CONF_MAX_VALVE_POSITION: user_input.get(CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION),
+                            CONF_RETURN_TEMP_CLOSE: user_input.get(
+                                CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE
+                            ),
+                            CONF_RETURN_TEMP_OPEN: user_input.get(
+                                CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN
+                            ),
+                            CONF_MAX_VALVE_POSITION: user_input.get(
+                                CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION
+                            ),
                         }
-                        
+
                         if CONF_TRVS not in room:
                             room[CONF_TRVS] = []
-                        
+
                         room[CONF_TRVS].append(trv_config)
                         break
-                
+
                 self._save_rooms(rooms)
-                
-                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-                
+
+                # Schedule reload instead of awaiting it
+                self.hass.async_create_task(
+                    self.hass.config_entries.async_reload(self.config_entry.entry_id)
+                )
+
                 return self.async_create_entry(title="", data={})
-                    
+
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
@@ -269,14 +301,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Edit TRV settings in the selected room."""
         rooms = self._get_rooms()
-        
+
         # Find the selected room
         selected_room_config = None
         for room in rooms:
             if room[CONF_ROOM_NAME] == self._selected_room:
                 selected_room_config = room
                 break
-        
+
         if not selected_room_config or not selected_room_config.get(CONF_TRVS):
             return self.async_abort(reason="no_trvs")
 
@@ -289,7 +321,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     if trv[CONF_TRV] == self._selected_trv:
                         self._selected_trv_config = trv
                         break
-                
+
                 # Show edit form with current values
                 return self.async_show_form(
                     step_id="edit_trv",
@@ -297,30 +329,42 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         {
                             vol.Required(
                                 CONF_RETURN_TEMP_CLOSE,
-                                default=trv.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE)
+                                default=trv.get(
+                                    CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE
+                                ),
                             ): selector.NumberSelector(
-                                selector.NumberSelectorConfig(min=20, max=80, step=0.5, unit_of_measurement="°C")
+                                selector.NumberSelectorConfig(
+                                    min=20, max=80, step=0.5, unit_of_measurement="°C"
+                                )
                             ),
                             vol.Required(
                                 CONF_RETURN_TEMP_OPEN,
-                                default=trv.get(CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN)
+                                default=trv.get(
+                                    CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN
+                                ),
                             ): selector.NumberSelector(
-                                selector.NumberSelectorConfig(min=20, max=80, step=0.5, unit_of_measurement="°C")
+                                selector.NumberSelectorConfig(
+                                    min=20, max=80, step=0.5, unit_of_measurement="°C"
+                                )
                             ),
                             vol.Required(
                                 CONF_MAX_VALVE_POSITION,
-                                default=trv.get(CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION)
+                                default=trv.get(
+                                    CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION
+                                ),
                             ): selector.NumberSelector(
-                                selector.NumberSelectorConfig(min=0, max=100, step=1, unit_of_measurement="%")
+                                selector.NumberSelectorConfig(
+                                    min=0, max=100, step=1, unit_of_measurement="%"
+                                )
                             ),
                         }
                     ),
                     description_placeholders={"room_name": self._selected_room},
                 )
-            
+
             # Show TRV selection list
             trv_ids = [trv[CONF_TRV] for trv in selected_room_config[CONF_TRVS]]
-            
+
             return self.async_show_form(
                 step_id="edit_trv",
                 data_schema=vol.Schema(
@@ -330,7 +374,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ),
                 description_placeholders={"room_name": self._selected_room},
             )
-        
+
         # Step 2: Save the edited values
         if user_input is not None:
             try:
@@ -339,19 +383,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     if trv[CONF_TRV] == self._selected_trv:
                         trv[CONF_RETURN_TEMP_CLOSE] = user_input[CONF_RETURN_TEMP_CLOSE]
                         trv[CONF_RETURN_TEMP_OPEN] = user_input[CONF_RETURN_TEMP_OPEN]
-                        trv[CONF_MAX_VALVE_POSITION] = user_input[CONF_MAX_VALVE_POSITION]
+                        trv[CONF_MAX_VALVE_POSITION] = user_input[
+                            CONF_MAX_VALVE_POSITION
+                        ]
                         break
-                
+
                 self._save_rooms(rooms)
-                
+
                 # Clear selection for next time
                 delattr(self, "_selected_trv")
                 delattr(self, "_selected_trv_config")
-                
+
                 await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-                
+
                 return self.async_create_entry(title="", data={})
-                    
+
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception")
                 # Clear selection
@@ -366,31 +412,33 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Remove a TRV from the selected room."""
         rooms = self._get_rooms()
-        
+
         # Find the selected room
         selected_room_config = None
         for room in rooms:
             if room[CONF_ROOM_NAME] == self._selected_room:
                 selected_room_config = room
                 break
-        
+
         if not selected_room_config or not selected_room_config.get(CONF_TRVS):
             return self.async_abort(reason="no_trvs")
 
         if user_input is not None:
             trv_id = user_input["trv"]
             selected_room_config[CONF_TRVS] = [
-                trv for trv in selected_room_config[CONF_TRVS] if trv[CONF_TRV] != trv_id
+                trv
+                for trv in selected_room_config[CONF_TRVS]
+                if trv[CONF_TRV] != trv_id
             ]
-            
+
             self._save_rooms(rooms)
-            
+
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            
+
             return self.async_create_entry(title="", data={})
 
         trv_ids = [trv[CONF_TRV] for trv in selected_room_config[CONF_TRVS]]
-        
+
         return self.async_show_form(
             step_id="remove_trv",
             data_schema=vol.Schema(
@@ -406,58 +454,71 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """List all TRVs in the selected room."""
         rooms = self._get_rooms()
-        
+
         # Find the selected room
         selected_room_config = None
         for room in rooms:
             if room[CONF_ROOM_NAME] == self._selected_room:
                 selected_room_config = room
                 break
-        
+
         if not selected_room_config or not selected_room_config.get(CONF_TRVS):
             return self.async_abort(reason="no_trvs")
-        
-        trv_list = "\n".join([
-            f"- {trv[CONF_TRV]} (Return: {trv[CONF_RETURN_TEMP]})"
-            for trv in selected_room_config[CONF_TRVS]
-        ])
-        
-        return self.async_abort(reason="trvs_listed", description_placeholders={"trvs": trv_list, "room_name": self._selected_room})
+
+        trv_list = "\n".join(
+            [
+                f"- {trv[CONF_TRV]} (Return: {trv[CONF_RETURN_TEMP]})"
+                for trv in selected_room_config[CONF_TRVS]
+            ]
+        )
+
+        return self.async_abort(
+            reason="trvs_listed",
+            description_placeholders={
+                "trvs": trv_list,
+                "room_name": self._selected_room,
+            },
+        )
 
     async def async_step_remove_room(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Remove a room."""
         rooms = self._get_rooms()
-        
+
         if not rooms:
             return self.async_abort(reason="no_rooms")
 
         if user_input is not None:
             room_name = user_input["room"]
             _LOGGER.info("Removing room: %s", room_name)
-            
+
             # Delete the entity from registry before removing the room
             entity_reg = er.async_get(self.hass)
-            unique_id = f"{self.config_entry.entry_id}_{room_name.lower().replace(' ', '_')}"
+            unique_id = (
+                f"{self.config_entry.entry_id}_{room_name.lower().replace(' ', '_')}"
+            )
             entity_id = entity_reg.async_get_entity_id("climate", DOMAIN, unique_id)
             if entity_id:
                 _LOGGER.info("Removing entity %s from registry", entity_id)
                 entity_reg.async_remove(entity_id)
-            
+
             rooms = [room for room in rooms if room[CONF_ROOM_NAME] != room_name]
             _LOGGER.info("Rooms after removal: %s", [r[CONF_ROOM_NAME] for r in rooms])
-            
+
             self._save_rooms(rooms)
-            
-            # Force unload and reload to properly remove entities
-            await self.hass.config_entries.async_unload(self.config_entry.entry_id)
-            await self.hass.config_entries.async_setup(self.config_entry.entry_id)
-            
+
+            # Schedule unload and reload instead of awaiting
+            async def reload_integration():
+                await self.hass.config_entries.async_unload(self.config_entry.entry_id)
+                await self.hass.config_entries.async_setup(self.config_entry.entry_id)
+
+            self.hass.async_create_task(reload_integration())
+
             return self.async_create_entry(title="", data={})
 
         room_names = [room[CONF_ROOM_NAME] for room in rooms]
-        
+
         return self.async_show_form(
             step_id="remove_room",
             data_schema=vol.Schema(
@@ -472,10 +533,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """List all configured rooms."""
         rooms = self._get_rooms()
-        
+
         if not rooms:
             return self.async_abort(reason="no_rooms")
-        
+
         room_list = "\n".join([f"• {room[CONF_ROOM_NAME]}" for room in rooms])
-        
-        return self.async_abort(reason="rooms_listed", description_placeholders={"rooms": room_list})
+
+        return self.async_abort(
+            reason="rooms_listed", description_placeholders={"rooms": room_list}
+        )
