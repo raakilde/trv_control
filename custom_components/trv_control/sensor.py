@@ -28,69 +28,89 @@ async def async_setup_entry(
 ) -> None:
     """Set up TRV Control sensors from a config entry."""
     _LOGGER.info("Sensor platform setup starting for entry %s", config_entry.entry_id)
-    
-    # Retry logic to wait for climate entity to be available
+
+    # Retry logic to wait for climate entities to be available
     import asyncio
-    climate_entity = None
+
+    climate_entities = None
     for attempt in range(10):  # Try for up to 5 seconds
-        climate_entity = hass.data.get(DOMAIN, {}).get(config_entry.entry_id)
-        if climate_entity:
+        climate_entities = hass.data.get(DOMAIN, {}).get(config_entry.entry_id)
+        if climate_entities:
             break
-        _LOGGER.debug("Climate entity not yet available, waiting... (attempt %d/10)", attempt + 1)
+        _LOGGER.debug(
+            "Climate entities not yet available, waiting... (attempt %d/10)",
+            attempt + 1,
+        )
         await asyncio.sleep(0.5)
-    
-    if not climate_entity:
+
+    if not climate_entities:
         _LOGGER.error(
-            "Could not find climate entity for config entry %s after waiting",
+            "Could not find climate entities for config entry %s after waiting",
             config_entry.entry_id,
         )
         return
 
+    # Ensure it's a list
+    if not isinstance(climate_entities, list):
+        climate_entities = [climate_entities]
+
     _LOGGER.info(
-        "Setting up sensors for %s (has %d TRVs)",
-        climate_entity.name,
-        len(climate_entity._trvs),
+        "Setting up sensors for %d climate entities",
+        len(climate_entities),
     )
 
-    # Use the climate entity's room name as the base name
-    base_name = climate_entity._room_name
+    all_sensors = []
 
-    sensors = []
+    # Create sensors for each climate entity (room)
+    for climate_entity in climate_entities:
+        _LOGGER.info(
+            "Creating sensors for %s (has %d TRVs)",
+            climate_entity.name,
+            len(climate_entity._trvs),
+        )
 
-    # Add sensors for each TRV
-    for idx, trv in enumerate(climate_entity._trvs):
-        trv_name = trv.get("name", f"TRV {idx + 1}")
+        # Use the climate entity's room name as the base name
+        base_name = climate_entity._room_name
 
+        sensors = []
+
+        # Add sensors for each TRV
+        for idx, trv in enumerate(climate_entity._trvs):
+            trv_name = trv.get("name", f"TRV {idx + 1}")
+
+            sensors.extend(
+                [
+                    TRVValvePositionSensor(climate_entity, trv, base_name, trv_name),
+                    TRVReturnTempSensor(climate_entity, trv, base_name, trv_name),
+                ]
+            )
+
+        # Add overall control sensors
         sensors.extend(
             [
-                TRVValvePositionSensor(climate_entity, trv, base_name, trv_name),
-                TRVReturnTempSensor(climate_entity, trv, base_name, trv_name),
+                HeatingStatusSensor(climate_entity, base_name),
+                TargetTempDifferenceSensor(climate_entity, base_name),
+                AverageValvePositionSensor(climate_entity, base_name),
+                HeatingDemandSensor(climate_entity, base_name),
+                ControlEfficiencySensor(climate_entity, base_name),
+                TemperatureTrendSensor(climate_entity, base_name),
+                ReturnTempDeltaSensor(climate_entity, base_name),
             ]
         )
 
-    # Add overall control sensors
-    sensors.extend(
-        [
-            HeatingStatusSensor(climate_entity, base_name),
-            TargetTempDifferenceSensor(climate_entity, base_name),
-            AverageValvePositionSensor(climate_entity, base_name),
-            HeatingDemandSensor(climate_entity, base_name),
-            ControlEfficiencySensor(climate_entity, base_name),
-            TemperatureTrendSensor(climate_entity, base_name),
-            ReturnTempDeltaSensor(climate_entity, base_name),
-        ]
-    )
+        # Add per-TRV diagnostic sensors
+        for idx, trv in enumerate(climate_entity._trvs):
+            trv_name = trv.get("name", f"TRV {idx + 1}")
+            sensors.append(TRVHealthSensor(climate_entity, trv, base_name, trv_name))
 
-    # Add per-TRV diagnostic sensors
-    for idx, trv in enumerate(climate_entity._trvs):
-        trv_name = trv.get("name", f"TRV {idx + 1}")
-        sensors.append(TRVHealthSensor(climate_entity, trv, base_name, trv_name))
+        _LOGGER.info("Adding %d sensors for %s", len(sensors), climate_entity.name)
+        all_sensors.extend(sensors)
 
-    _LOGGER.info("Adding %d sensors to Home Assistant", len(sensors))
-    for sensor in sensors:
+    _LOGGER.info("Adding total of %d sensors to Home Assistant", len(all_sensors))
+    for sensor in all_sensors:
         _LOGGER.debug("  - %s (unique_id: %s)", sensor.name, sensor.unique_id)
 
-    async_add_entities(sensors)
+    async_add_entities(all_sensors)
     _LOGGER.info("Sensor platform setup complete")
 
 

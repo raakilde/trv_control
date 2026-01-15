@@ -2,7 +2,7 @@ default_config:
 
 frontend:
   extra_module_url:
-    - /local/trv-control-card.js
+    - /local/www/trv-control-card.js
 
 logger:
   default: INFO

@@ -61,15 +61,15 @@ async def async_setup_entry(
 
     async_add_entities(entities)
 
-    # Store the first entity in hass.data for sensor access
+    # Store all entities in hass.data for sensor access
     if entities:
         from .const import DOMAIN
 
-        hass.data[DOMAIN][config_entry.entry_id] = entities[0]
+        hass.data[DOMAIN][config_entry.entry_id] = entities
         _LOGGER.info(
-            "Climate entity stored in hass.data for entry %s: %s",
+            "Climate entities stored in hass.data for entry %s: %d entities",
             config_entry.entry_id,
-            entities[0].name,
+            len(entities),
         )
 
 
