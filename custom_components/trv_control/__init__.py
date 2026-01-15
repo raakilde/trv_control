@@ -17,7 +17,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.CLIMATE]
+PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR]
 
 SET_VALVE_POSITION_SCHEMA = vol.Schema(
     {

@@ -557,15 +557,20 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     payload,
                 )
                 
-                await self.hass.services.async_call(
-                    "mqtt",
-                    "publish",
-                    {
-                        "topic": topic,
-                        "payload": payload,
-                    },
-                    blocking=False,
-                )
+                if self.hass.services.has_service("mqtt", "publish"):
+                    await self.hass.services.async_call(
+                        "mqtt",
+                        "publish",
+                        {
+                            "topic": topic,
+                            "payload": payload,
+                        },
+                        blocking=False,
+                    )
+                else:
+                    _LOGGER.warning(
+                        "MQTT service not available for %s", trv_id
+                    )
             except Exception as e:
                 _LOGGER.error("Could not set valve position via MQTT for %s: %s", trv_id, e)
 
@@ -620,22 +625,28 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     break
             
             if not sensor_set:
-                # No select entity found, use MQTT
-                _LOGGER.info(
-                    "No select entity found for %s, using MQTT: topic=%s",
-                    trv_id,
-                    topic,
-                )
-                
-                await self.hass.services.async_call(
-                    "mqtt",
-                    "publish",
-                    {
-                        "topic": topic,
-                        "payload": '{"temperature_sensor_select": "external"}',
-                    },
-                    blocking=True,
-                )
+                # No select entity found, try MQTT if available
+                if self.hass.services.has_service("mqtt", "publish"):
+                    _LOGGER.info(
+                        "No select entity found for %s, using MQTT: topic=%s",
+                        trv_id,
+                        topic,
+                    )
+                    
+                    await self.hass.services.async_call(
+                        "mqtt",
+                        "publish",
+                        {
+                            "topic": topic,
+                            "payload": '{"temperature_sensor_select": "external"}',
+                        },
+                        blocking=True,
+                    )
+                else:
+                    _LOGGER.warning(
+                        "No select entity found for %s and MQTT not available",
+                        trv_id,
+                    )
             
             # Small delay to ensure mode is set
             import asyncio
@@ -664,25 +675,31 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     break
             
             if not temp_set:
-                # No number entity found, use MQTT
-                temp_payload = f'{{"external_temperature_input": {temperature}}}'
-                
-                _LOGGER.info(
-                    "No number entity found for %s, using MQTT: topic=%s, payload=%s",
-                    trv_id,
-                    topic,
-                    temp_payload,
-                )
-                
-                await self.hass.services.async_call(
-                    "mqtt",
-                    "publish",
-                    {
-                        "topic": topic,
-                        "payload": temp_payload,
-                    },
-                    blocking=False,
-                )
+                # No number entity found, try MQTT if available
+                if self.hass.services.has_service("mqtt", "publish"):
+                    temp_payload = f'{{"external_temperature_input": {temperature}}}'
+                    
+                    _LOGGER.info(
+                        "No number entity found for %s, using MQTT: topic=%s, payload=%s",
+                        trv_id,
+                        topic,
+                        temp_payload,
+                    )
+                    
+                    await self.hass.services.async_call(
+                        "mqtt",
+                        "publish",
+                        {
+                            "topic": topic,
+                            "payload": temp_payload,
+                        },
+                        blocking=False,
+                    )
+                else:
+                    _LOGGER.warning(
+                        "No number entity found for %s and MQTT not available",
+                        trv_id,
+                    )
                 
         except Exception as e:
             _LOGGER.error("Failed to send room temperature to %s: %s", trv_id, e)
