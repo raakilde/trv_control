@@ -13,6 +13,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_ANTICIPATORY_OFFSET,
     CONF_MAX_VALVE_POSITION,
     CONF_RETURN_TEMP,
     CONF_RETURN_TEMP_CLOSE,
@@ -23,6 +24,7 @@ from .const import (
     CONF_TRV,
     CONF_TRVS,
     CONF_WINDOW_SENSOR,
+    DEFAULT_ANTICIPATORY_OFFSET,
     DEFAULT_MAX_VALVE_POSITION,
     DEFAULT_RETURN_TEMP_CLOSE,
     DEFAULT_RETURN_TEMP_OPEN,
@@ -406,14 +408,26 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # Update the TRV config
                 for trv in selected_room_config[CONF_TRVS]:
                     if trv[CONF_TRV] == self._selected_trv:
-                        trv[CONF_RETURN_TEMP_CLOSE] = user_input[CONF_RETURN_TEMP_CLOSE]
-                        trv[CONF_RETURN_TEMP_OPEN] = user_input[CONF_RETURN_TEMP_OPEN]
-                        trv[CONF_MAX_VALVE_POSITION] = user_input[
-                            CONF_MAX_VALVE_POSITION
-                        ]
-                        trv[CONF_ANTICIPATORY_OFFSET] = user_input[
-                            CONF_ANTICIPATORY_OFFSET
-                        ]
+                        trv[CONF_RETURN_TEMP_CLOSE] = user_input.get(
+                            CONF_RETURN_TEMP_CLOSE,
+                            trv.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE),
+                        )
+                        trv[CONF_RETURN_TEMP_OPEN] = user_input.get(
+                            CONF_RETURN_TEMP_OPEN,
+                            trv.get(CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN),
+                        )
+                        trv[CONF_MAX_VALVE_POSITION] = user_input.get(
+                            CONF_MAX_VALVE_POSITION,
+                            trv.get(
+                                CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION
+                            ),
+                        )
+                        trv[CONF_ANTICIPATORY_OFFSET] = user_input.get(
+                            CONF_ANTICIPATORY_OFFSET,
+                            trv.get(
+                                CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
+                            ),
+                        )
                         break
 
                 self._save_rooms(rooms)

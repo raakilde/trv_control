@@ -23,6 +23,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_ANTICIPATORY_OFFSET,
     CONF_MAX_VALVE_POSITION,
     CONF_RETURN_TEMP,
     CONF_RETURN_TEMP_CLOSE,
@@ -33,6 +34,7 @@ from .const import (
     CONF_TRV,
     CONF_TRVS,
     CONF_WINDOW_SENSOR,
+    DEFAULT_ANTICIPATORY_OFFSET,
     DEFAULT_MAX_VALVE_POSITION,
     DEFAULT_RETURN_TEMP_CLOSE,
     DEFAULT_RETURN_TEMP_OPEN,
