@@ -238,7 +238,14 @@ class HeatingStatusSensor(TRVControlSensorBase):
     @property
     def native_value(self) -> str:
         """Return the heating status."""
-        return getattr(self._climate_entity, "_heating_status", "unknown")
+        # Get directly from climate entity's extra_state_attributes
+        try:
+            attrs = self._climate_entity.extra_state_attributes
+            if attrs:
+                return attrs.get("heating_status", "unknown")
+        except Exception:
+            pass
+        return "unknown"
 
     @property
     def icon(self) -> str:
