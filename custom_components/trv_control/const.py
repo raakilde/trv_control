@@ -15,12 +15,14 @@ CONF_RETURN_TEMP = "return_temp"
 CONF_RETURN_TEMP_CLOSE = "return_temp_close"
 CONF_RETURN_TEMP_OPEN = "return_temp_open"
 CONF_MAX_VALVE_POSITION = "max_valve_position"
+CONF_ANTICIPATORY_OFFSET = "anticipatory_offset"
 
 # Defaults
 DEFAULT_NAME = "TRV Control"
 DEFAULT_RETURN_TEMP_CLOSE = 32.0
 DEFAULT_RETURN_TEMP_OPEN = 30.0
 DEFAULT_MAX_VALVE_POSITION = 100
+DEFAULT_ANTICIPATORY_OFFSET = 0.0
 
 # Services
 SERVICE_SET_VALVE_POSITION = "set_valve_position"

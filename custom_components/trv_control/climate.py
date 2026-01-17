@@ -394,24 +394,41 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         max_position = trv_config.get(
             CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION
         )
+        anticipatory_offset = trv_config.get(
+            CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
+        )
 
         # Primary control: Room temperature vs target temperature
         room_temp = self._attr_current_temperature
         target_temp = self._attr_target_temperature
 
         if room_temp is not None and target_temp is not None:
+            # Calculate temperature difference
+            temp_diff = target_temp - room_temp
+
             # Room has reached or exceeded target - close valve
-            if room_temp >= target_temp:
+            # Also close if within anticipatory_offset of target to prevent overshoot
+            if room_temp >= target_temp or temp_diff <= anticipatory_offset:
                 if trv_state["valve_position"] != 0:
                     await self._async_set_valve_position(trv_id, 0)
                     await self._async_send_temperature_to_trv(trv_id, target_temp)
                     trv_state["valve_control_active"] = True
-                    _LOGGER.info(
-                        "Room temp %.1f°C >= target %.1f°C, valve closed for TRV %s",
-                        room_temp,
-                        target_temp,
-                        trv_id,
-                    )
+                    if temp_diff <= anticipatory_offset and room_temp < target_temp:
+                        _LOGGER.info(
+                            "Room temp %.1f°C approaching target %.1f°C (diff %.1f°C <= %.1f°C offset), valve closed early to prevent overshoot for TRV %s",
+                            room_temp,
+                            target_temp,
+                            temp_diff,
+                            anticipatory_offset,
+                            trv_id,
+                        )
+                    else:
+                        _LOGGER.info(
+                            "Room temp %.1f°C >= target %.1f°C, valve closed for TRV %s",
+                            room_temp,
+                            target_temp,
+                            trv_id,
+                        )
 
             # Room is below target - check return temp before opening
             elif room_temp < target_temp:
@@ -895,6 +912,9 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             )
             attrs[f"{prefix}_max_position"] = trv.get(
                 CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION
+            )
+            attrs[f"{prefix}_anticipatory_offset"] = trv.get(
+                CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
             )
 
             # Add individual TRV status and reason

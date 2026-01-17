@@ -80,6 +80,13 @@ def get_trv_schema() -> vol.Schema:
                     min=0, max=100, step=1, unit_of_measurement="%"
                 )
             ),
+            vol.Optional(
+                CONF_ANTICIPATORY_OFFSET, default=DEFAULT_ANTICIPATORY_OFFSET
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=2.0, step=0.1, unit_of_measurement="°C", mode="box"
+                )
+            ),
         }
     )
 
@@ -268,6 +275,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                             CONF_MAX_VALVE_POSITION: user_input.get(
                                 CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION
                             ),
+                            CONF_ANTICIPATORY_OFFSET: user_input.get(
+                                CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
+                            ),
                         }
 
                         if CONF_TRVS not in room:
@@ -357,6 +367,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                                     min=0, max=100, step=1, unit_of_measurement="%"
                                 )
                             ),
+                            vol.Required(
+                                CONF_ANTICIPATORY_OFFSET,
+                                default=trv.get(
+                                    CONF_ANTICIPATORY_OFFSET,
+                                    DEFAULT_ANTICIPATORY_OFFSET,
+                                ),
+                            ): selector.NumberSelector(
+                                selector.NumberSelectorConfig(
+                                    min=0,
+                                    max=2.0,
+                                    step=0.1,
+                                    unit_of_measurement="°C",
+                                    mode="box",
+                                )
+                            ),
                         }
                     ),
                     description_placeholders={"room_name": self._selected_room},
@@ -385,6 +410,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         trv[CONF_RETURN_TEMP_OPEN] = user_input[CONF_RETURN_TEMP_OPEN]
                         trv[CONF_MAX_VALVE_POSITION] = user_input[
                             CONF_MAX_VALVE_POSITION
+                        ]
+                        trv[CONF_ANTICIPATORY_OFFSET] = user_input[
+                            CONF_ANTICIPATORY_OFFSET
                         ]
                         break
 
@@ -522,17 +550,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 _LOGGER.info("Removing sensor entity %s from registry", entity_id)
                 entity_reg.async_remove(entity_id)
 
+            _LOGGER.info(
+                "Removed %d entities for room %s",
+                len(entities_to_remove) + 1,
+                room_name,
+            )
+
             rooms = [room for room in rooms if room[CONF_ROOM_NAME] != room_name]
             _LOGGER.info("Rooms after removal: %s", [r[CONF_ROOM_NAME] for r in rooms])
 
             self._save_rooms(rooms)
 
-            # Schedule unload and reload instead of awaiting
-            async def reload_integration():
-                await self.hass.config_entries.async_unload(self.config_entry.entry_id)
-                await self.hass.config_entries.async_setup(self.config_entry.entry_id)
-
-            self.hass.async_create_task(reload_integration())
+            # Reload integration to apply changes
+            self.hass.async_create_task(
+                self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            )
 
             return self.async_create_entry(title="", data={})
 
