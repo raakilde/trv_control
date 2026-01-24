@@ -15,19 +15,27 @@ CONF_RETURN_TEMP = "return_temp"
 CONF_RETURN_TEMP_CLOSE = "return_temp_close"
 CONF_RETURN_TEMP_OPEN = "return_temp_open"
 CONF_MAX_VALVE_POSITION = "max_valve_position"
+CONF_MIN_VALVE_POSITION = "min_valve_position"
 CONF_ANTICIPATORY_OFFSET = "anticipatory_offset"
 
 # Defaults
 DEFAULT_NAME = "TRV Control"
-DEFAULT_RETURN_TEMP_CLOSE = 32.0
-DEFAULT_RETURN_TEMP_OPEN = 30.0
+DEFAULT_RETURN_TEMP_CLOSE = (
+    32.0  # Keep low for efficiency - high return = wasted energy
+)
+DEFAULT_RETURN_TEMP_OPEN = 30.0  # Keep low for efficiency
 DEFAULT_MAX_VALVE_POSITION = 100
-DEFAULT_ANTICIPATORY_OFFSET = 0.5  # Close valve 0.5°C before target to prevent overshoot
+DEFAULT_MIN_VALVE_POSITION_DELTA = 5  # Default delta for max open % above min
+DEFAULT_ANTICIPATORY_OFFSET = 0.3  # Reduced from 0.5°C - less aggressive anticipation
 
 # Proportional control settings
-DEFAULT_PROPORTIONAL_BAND = 3.0  # Temperature range for proportional control (°C)
-DEFAULT_MIN_VALVE_CHANGE = 5  # Minimum valve position change to prevent flutter (%)
-DEFAULT_TEMP_HISTORY_SIZE = 20  # Number of temperature readings to keep for rate calculation
+DEFAULT_PROPORTIONAL_BAND = (
+    2.5  # Reduced from 3.0°C - tighter control for better stability
+)
+DEFAULT_MIN_VALVE_CHANGE = (
+    15  # Increased from 5% - prevents excessive cycling (main fix)
+)
+DEFAULT_TEMP_HISTORY_SIZE = 30  # Increased from 20 - better heating rate calculation
 
 # Services
 SERVICE_SET_VALVE_POSITION = "set_valve_position"
