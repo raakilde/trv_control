@@ -998,11 +998,11 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                 CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
             )
 
-            # Expose conf_a and conf_b (min/max valve position for PID)
-            conf_a = trv.get("min_pid_valve_position", trv_state["valve_position"])
-            conf_b = trv.get("max_pid_valve_position", conf_a + 5)
-            attrs[f"{prefix}_min_valve_position"] = conf_a
-            attrs[f"{prefix}_max_valve_position"] = conf_b
+            # Expose PID and valve range config as attributes
+            attrs[f"{prefix}_min_pid_valve_position"] = min_pid_valve_position
+            attrs[f"{prefix}_max_pid_valve_position"] = max_pid_valve_position
+            attrs[f"{prefix}_proportional_band"] = trv.get("proportional_band", DEFAULT_PROPORTIONAL_BAND)
+            attrs[f"{prefix}_pid_anticipatory_offset"] = trv.get("pid_anticipatory_offset", trv.get(CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET))
 
             # Add individual TRV status and reason
             trv_status = self._determine_trv_status_with_reason(trv, trv_state)
