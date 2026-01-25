@@ -1,8 +1,3 @@
-# TRV config field constants
-CONF_PROPORTIONAL_BAND = "proportional_band"
-CONF_PID_ANTICIPATORY_OFFSET = "pid_anticipatory_offset"
-CONF_MIN_PID_VALVE_POSITION = "min_pid_valve_position"
-CONF_MAX_PID_VALVE_POSITION = "max_pid_valve_position"
 """Constants for the TRV Control integration."""
 
 DOMAIN = "trv_control"
@@ -22,6 +17,12 @@ CONF_RETURN_TEMP_OPEN = "return_temp_open"
 CONF_MAX_VALVE_POSITION = "max_valve_position"
 CONF_MIN_VALVE_POSITION = "min_valve_position"
 CONF_ANTICIPATORY_OFFSET = "anticipatory_offset"
+
+# PID/Advanced TRV config constants
+CONF_PROPORTIONAL_BAND = "proportional_band"
+CONF_PID_ANTICIPATORY_OFFSET = "pid_anticipatory_offset"
+CONF_MIN_PID_VALVE_POSITION = "min_pid_valve_position"
+CONF_MAX_PID_VALVE_POSITION = "max_pid_valve_position"
 
 # Defaults
 DEFAULT_NAME = "TRV Control"

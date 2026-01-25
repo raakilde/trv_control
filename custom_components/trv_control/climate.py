@@ -24,7 +24,11 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_ANTICIPATORY_OFFSET,
+    CONF_MAX_PID_VALVE_POSITION,
     CONF_MAX_VALVE_POSITION,
+    CONF_MIN_PID_VALVE_POSITION,
+    CONF_PID_ANTICIPATORY_OFFSET,
+    CONF_PROPORTIONAL_BAND,
     CONF_RETURN_TEMP,
     CONF_RETURN_TEMP_CLOSE,
     CONF_RETURN_TEMP_OPEN,
@@ -472,6 +476,16 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         if self._window_open or self._attr_hvac_mode == HVACMode.OFF:
             return
 
+        # Get configuration for this TRV (needed for failsafe)
+        current_valve_position = trv_state["valve_position"]
+        min_pid_valve_position = trv_config.get(
+            CONF_MIN_PID_VALVE_POSITION, current_valve_position
+        )
+        max_pid_valve_position = trv_config.get(
+            CONF_MAX_PID_VALVE_POSITION,
+            min_pid_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA,
+        )
+
         # Failsafe: If return temp hasn't updated in 1 hour and room needs heating, force heating
         return_temp_last_updated = trv_state.get("return_temp_last_updated")
         failsafe_active = False
@@ -488,14 +502,14 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                 and target_temp is not None
             ):
                 if room_temp < target_temp:
-                    if trv_state["valve_position"] != conf_b:
+                    if trv_state["valve_position"] != max_pid_valve_position:
                         _LOGGER.warning(
-                            "Failsafe: Return temp for %s hasn't updated in %.0f minutes, room needs heating - forcing open to conf_b (%d%%)",
+                            "Failsafe: Return temp for %s hasn't updated in %.0f minutes, room needs heating - forcing open to %d%%",
                             trv_id,
                             time_since_update / 60,
-                            conf_b,
+                            max_pid_valve_position,
                         )
-                        await self._async_set_valve_position(trv_id, conf_b)
+                        await self._async_set_valve_position(trv_id, max_pid_valve_position)
                         await self._async_send_temperature_to_trv(trv_id, target_temp)
                         await self._async_nudge_trv_if_idle(trv_id, target_temp)
                         trv_state["valve_control_active"] = True
@@ -508,15 +522,6 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         # Get thresholds for this TRV
         close_threshold = trv_config.get(
             CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE
-        )
-        # conf_a: current valve open % (if not set, use DEFAULT_MIN_VALVE_POSITION_DELTA as base)
-        current_valve_position = trv_state["valve_position"]
-        min_pid_valve_position = trv_config.get(
-            "min_pid_valve_position", current_valve_position
-        )
-        max_pid_valve_position = trv_config.get(
-            "max_pid_valve_position",
-            min_pid_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA,
         )
 
         # Only control based on return temp and allowed range
@@ -536,10 +541,10 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             room_temp = self._attr_current_temperature
             target_temp = self._attr_target_temperature
             proportional_band = trv_config.get(
-                "proportional_band", DEFAULT_PROPORTIONAL_BAND
+                CONF_PROPORTIONAL_BAND, DEFAULT_PROPORTIONAL_BAND
             )
             anticipatory_offset = trv_config.get(
-                "pid_anticipatory_offset",
+                CONF_PID_ANTICIPATORY_OFFSET,
                 trv_config.get(CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET),
             )
             if room_temp is not None and target_temp is not None:
@@ -1006,19 +1011,19 @@ class TRVClimate(ClimateEntity, RestoreEntity):
 
             # Expose PID and valve range config as attributes
             min_pid_valve_position = trv.get(
-                "min_pid_valve_position", trv_state["valve_position"]
+                CONF_MIN_PID_VALVE_POSITION, trv_state["valve_position"]
             )
             max_pid_valve_position = trv.get(
-                "max_pid_valve_position",
+                CONF_MAX_PID_VALVE_POSITION,
                 min_pid_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA,
             )
             attrs[f"{prefix}_min_pid_valve_position"] = min_pid_valve_position
             attrs[f"{prefix}_max_pid_valve_position"] = max_pid_valve_position
             attrs[f"{prefix}_proportional_band"] = trv.get(
-                "proportional_band", DEFAULT_PROPORTIONAL_BAND
+                CONF_PROPORTIONAL_BAND, DEFAULT_PROPORTIONAL_BAND
             )
             attrs[f"{prefix}_pid_anticipatory_offset"] = trv.get(
-                "pid_anticipatory_offset",
+                CONF_PID_ANTICIPATORY_OFFSET,
                 trv.get(CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET),
             )
 
