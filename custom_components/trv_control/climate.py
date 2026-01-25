@@ -39,10 +39,9 @@ from .const import (
     CONF_WINDOW_SENSOR,
     DEFAULT_ANTICIPATORY_OFFSET,
     DEFAULT_MAX_VALVE_POSITION,
-    DEFAULT_MIN_VALVE_POSITION_DELTA,
+    DEFAULT_MIN_VALVE_POSITION,
     DEFAULT_PROPORTIONAL_BAND,
     DEFAULT_RETURN_TEMP_CLOSE,
-    DEFAULT_RETURN_TEMP_OPEN,
     DEFAULT_TEMP_HISTORY_SIZE,
 )
 
@@ -169,7 +168,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     self._attr_current_temperature
                 )
 
-                # Also check and nudge any idle TRVs that should be heating
+                # Also check and send target temp to any TRVs that should be heating
                 if (
                     self._attr_hvac_mode == HVACMode.HEAT
                     and self._attr_target_temperature is not None
@@ -178,9 +177,9 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                         trv_id = trv[CONF_TRV]
                         trv_state = self._trv_states[trv_id]
 
-                        # If valve is open but TRV might be idle, nudge it
+                        # If valve is open, send target temperature
                         if trv_state["valve_position"] > 0:
-                            await self._async_nudge_trv_if_idle(
+                            await self._async_send_temperature_to_trv(
                                 trv_id, self._attr_target_temperature
                             )
             else:
@@ -459,10 +458,12 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         return valve_position
 
     async def _async_control_valve(self, trv_config: dict[str, Any]) -> None:
-        """Control valve based on room temperature and return temperature for a specific TRV.
+        """Simplified control valve logic based on return temperature.
 
-        Strategy: Set valve position and send actual target temperature.
-        If TRV shows idle when it should be heating, nudge setpoint by +0.5°C then back.
+        Simplified strategy:
+        1. Still send external temp to TRV
+        2. Stop heating when return temp is above configured threshold
+        3. Use conservative PID regulation that prevents return temp from exceeding threshold
         """
         trv_id = trv_config[CONF_TRV]
         trv_state = self._trv_states[trv_id]
@@ -475,110 +476,116 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         if self._window_open or self._attr_hvac_mode == HVACMode.OFF:
             return
 
-        # Get configuration for this TRV (needed for failsafe)
-        current_valve_position = trv_state["valve_position"]
-        min_valve_position = trv_config.get(
-            CONF_MIN_VALVE_POSITION, current_valve_position
-        )
+        # Get configuration for this TRV
         max_valve_position = trv_config.get(
-            CONF_MAX_VALVE_POSITION,
-            min_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA,
+            CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION
         )
-
-        # Failsafe: If return temp hasn't updated in 1 hour and room needs heating, force heating
-        return_temp_last_updated = trv_state.get("return_temp_last_updated")
-        failsafe_active = False
-        if return_temp_last_updated:
-            now = dt_util.now()
-            time_since_update = (now - return_temp_last_updated).total_seconds()
-            room_temp = self._attr_current_temperature
-            target_temp = self._attr_target_temperature
-
-            # If return temp is stale (>60 min) and room needs heating, force valve open
-            if (
-                time_since_update > 3600
-                and room_temp is not None
-                and target_temp is not None
-            ):
-                if room_temp < target_temp:
-                    if trv_state["valve_position"] != max_valve_position:
-                        _LOGGER.warning(
-                            "Failsafe: Return temp for %s hasn't updated in %.0f minutes, room needs heating - forcing open to %d%%",
-                            trv_id,
-                            time_since_update / 60,
-                            max_valve_position,
-                        )
-                        await self._async_set_valve_position(
-                            trv_id, max_valve_position
-                        )
-                        await self._async_send_temperature_to_trv(trv_id, target_temp)
-                        await self._async_nudge_trv_if_idle(trv_id, target_temp)
-                        trv_state["valve_control_active"] = True
-                    failsafe_active = True
-
-        # If failsafe is active, don't run normal control logic
-        if failsafe_active:
-            return
-
-        # Get thresholds for this TRV
         close_threshold = trv_config.get(
             CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE
         )
 
-        # Only control based on return temp and allowed range
+        # Conservative approach: create a buffer zone before the threshold
+        # If return temp is within 1°C of threshold, reduce max valve position
+        temp_buffer = 1.0  # 1°C buffer zone
+        conservative_threshold = close_threshold - temp_buffer
+
+        # Stop heating if return temp exceeds threshold
         if return_temp >= close_threshold:
-            # Close valve if return temp is too high
             if trv_state["valve_position"] != 0:
                 await self._async_set_valve_position(trv_id, 0)
                 trv_state["valve_control_active"] = True
                 _LOGGER.info(
-                    "Return temp %.1f >= %.1f, valve closed for TRV %s",
+                    "Return temp %.1f >= %.1f°C, stopping heating for TRV %s",
                     return_temp,
                     close_threshold,
                     trv_id,
                 )
         else:
-            # PID/proportional control within [min_valve_position, max_valve_position]
+            # Return temp allows heating - use conservative PID regulation
             room_temp = self._attr_current_temperature
             target_temp = self._attr_target_temperature
-            proportional_band = trv_config.get(
-                CONF_PROPORTIONAL_BAND, DEFAULT_PROPORTIONAL_BAND
-            )
-            anticipatory_offset = trv_config.get(
-                CONF_PID_ANTICIPATORY_OFFSET,
-                trv_config.get(CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET),
-            )
+
             if room_temp is not None and target_temp is not None:
-                pid_position = self._calculate_proportional_valve_position(
+                # Calculate effective max valve position based on return temp proximity to threshold
+                if return_temp >= conservative_threshold:
+                    # In buffer zone - reduce max valve position proportionally
+                    temp_margin = close_threshold - return_temp
+                    reduction_factor = temp_margin / temp_buffer  # 0.0 to 1.0
+                    effective_max_valve = int(
+                        max_valve_position * reduction_factor * 0.5
+                    )  # Cap at 50% when in buffer zone
+                    effective_max_valve = max(
+                        10, effective_max_valve
+                    )  # Minimum 10% to maintain some heating
+                    _LOGGER.debug(
+                        "Return temp %.1f in buffer zone (%.1f-%.1f°C), reducing max valve from %d%% to %d%% for TRV %s",
+                        return_temp,
+                        conservative_threshold,
+                        close_threshold,
+                        max_valve_position,
+                        effective_max_valve,
+                        trv_id,
+                    )
+                else:
+                    # Safe zone - use full max valve position
+                    effective_max_valve = max_valve_position
+
+                # Use PID control with the effective maximum
+                proportional_band = trv_config.get(
+                    CONF_PROPORTIONAL_BAND, DEFAULT_PROPORTIONAL_BAND
+                )
+                anticipatory_offset = trv_config.get(
+                    CONF_PID_ANTICIPATORY_OFFSET,
+                    trv_config.get(
+                        CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
+                    ),
+                )
+
+                desired_position = self._calculate_proportional_valve_position(
                     room_temp,
                     target_temp,
                     anticipatory_offset,
-                    max_pid_valve_position,
+                    effective_max_valve,
                     proportional_band,
                 )
-                # Clamp to [min_valve_position, max_valve_position] (unless 0)
-                if pid_position > 0:
-                    desired_position = max(
-                        min_valve_position,
-                        min(max_valve_position, pid_position),
+
+                if trv_state["valve_position"] != desired_position:
+                    await self._async_set_valve_position(trv_id, desired_position)
+                    trv_state["valve_control_active"] = True
+                    _LOGGER.info(
+                        "Return temp %.1f < %.1f°C, PID control set valve to %d%% (max %d%%) for TRV %s",
+                        return_temp,
+                        close_threshold,
+                        desired_position,
+                        effective_max_valve,
+                        trv_id,
                     )
-                else:
-                    desired_position = 0
             else:
-                # If no room temp, just use max_valve_position
-                desired_position = max_valve_position
-            if trv_state["valve_position"] != desired_position:
-                await self._async_set_valve_position(trv_id, desired_position)
-                trv_state["valve_control_active"] = True
-                _LOGGER.info(
-                    "Return temp %.1f < %.1f, valve set to %d%% for TRV %s (PID in range %d-%d%%)",
-                    return_temp,
-                    close_threshold,
-                    desired_position,
-                    trv_id,
-                    min_valve_position,
-                    max_valve_position,
-                )
+                # No room temp available - use conservative approach
+                if return_temp >= conservative_threshold:
+                    # In buffer zone - use reduced valve position
+                    temp_margin = close_threshold - return_temp
+                    reduction_factor = temp_margin / temp_buffer
+                    conservative_position = int(
+                        max_valve_position * reduction_factor * 0.3
+                    )  # Cap at 30% when no room temp
+                    conservative_position = max(10, conservative_position)
+                else:
+                    # Safe zone - use moderate valve position as fallback
+                    conservative_position = int(
+                        max_valve_position * 0.7
+                    )  # 70% when no room temp available
+
+                if trv_state["valve_position"] != conservative_position:
+                    await self._async_set_valve_position(trv_id, conservative_position)
+                    trv_state["valve_control_active"] = True
+                    _LOGGER.info(
+                        "Return temp %.1f < %.1f°C, no room temp - using conservative valve %d%% for TRV %s",
+                        return_temp,
+                        close_threshold,
+                        conservative_position,
+                        trv_id,
+                    )
 
     async def _async_nudge_trv_if_idle(self, trv_id: str, target_temp: float) -> None:
         """Check if TRV is idle when it should be heating, and force it to use external sensor.
@@ -931,7 +938,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             "temp_readings": len(self._temp_history),
         }
 
-        # Add learning status info
+        # Add learning status details when in learning mode
         if self._is_learning():
             readings_needed = max(0, 5 - len(self._temp_history))
             if len(self._temp_history) >= 2:
@@ -939,13 +946,12 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     self._temp_history[-1][0] - self._temp_history[0][0]
                 ).total_seconds() / 60.0
                 time_needed = max(0, 15 - int(time_span_min))
-                attrs["learning_status"] = (
-                    f"Learning: need {readings_needed} more readings or {time_needed} more minutes"
-                )
+                if readings_needed > 0:
+                    attrs["learning_status"] = f"Need {readings_needed} more readings"
+                else:
+                    attrs["learning_status"] = f"Need {time_needed} more minutes"
             else:
-                attrs["learning_status"] = (
-                    f"Learning: need {readings_needed} more readings"
-                )
+                attrs["learning_status"] = f"Need {readings_needed} more readings"
         else:
             # Show current heating rate when not learning
             heating_rate = self._calculate_heating_rate()
@@ -1000,23 +1006,19 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             attrs[f"{prefix}_close_threshold"] = trv.get(
                 CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE
             )
-            attrs[f"{prefix}_open_threshold"] = trv.get(
-                CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN
-            )
-            attrs[f"{prefix}_max_position"] = trv.get(
-                CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION
-            )
+            attrs[f"{prefix}_conservative_threshold"] = (
+                trv.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE) - 1.0
+            )  # Show the buffer zone threshold
             attrs[f"{prefix}_anticipatory_offset"] = trv.get(
                 CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
             )
 
             # Expose valve range config as attributes
             min_valve_position = trv.get(
-                CONF_MIN_VALVE_POSITION, trv_state["valve_position"]
+                CONF_MIN_VALVE_POSITION, DEFAULT_MIN_VALVE_POSITION
             )
             max_valve_position = trv.get(
-                CONF_MAX_VALVE_POSITION,
-                min_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA,
+                CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION
             )
             attrs[f"{prefix}_min_valve_position"] = min_valve_position
             attrs[f"{prefix}_max_valve_position"] = max_valve_position
@@ -1064,7 +1066,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             return f"For {days} dage siden"
 
     def _determine_heating_status(self) -> dict[str, str]:
-        """Determine the current heating status."""
+        """Determine the current heating status with simplified logic."""
         # Check window first - it sets HVAC to OFF so needs priority
         if self._window_open:
             return {"status": "window_open"}
@@ -1081,21 +1083,6 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         if target_temp is None:
             return {"status": "no_target"}
 
-        # Show learning status prominently
-        if self._is_learning():
-            readings_needed = max(0, 5 - len(self._temp_history))
-            if len(self._temp_history) >= 2:
-                time_span_min = (
-                    self._temp_history[-1][0] - self._temp_history[0][0]
-                ).total_seconds() / 60.0
-                time_needed = max(0, 15 - int(time_span_min))
-                if readings_needed > 0:
-                    return {"status": f"learning ({readings_needed} readings needed)"}
-                else:
-                    return {"status": f"learning ({time_needed} min needed)"}
-            else:
-                return {"status": "learning (collecting data)"}
-
         # Check if room has reached target
         if room_temp >= target_temp:
             return {"status": "target_reached"}
@@ -1106,7 +1093,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
     def _determine_trv_status_with_reason(
         self, trv_config: dict[str, Any], trv_state: dict[str, Any]
     ) -> dict[str, str]:
-        """Determine status and reason for individual TRV."""
+        """Determine status and reason for individual TRV with conservative control logic."""
         room_temp = self._attr_current_temperature
         target_temp = self._attr_target_temperature
         return_temp = trv_state["return_temp"]
@@ -1114,7 +1101,6 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         close_threshold = trv_config.get(
             CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE
         )
-        open_threshold = trv_config.get(CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN)
 
         if self._attr_hvac_mode == HVACMode.OFF:
             return {"status": "off", "reason": "HVAC mode is OFF"}
@@ -1131,44 +1117,50 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                 "reason": "Return temperature sensor not available",
             }
 
-        if room_temp is not None and target_temp is not None:
-            # Room temperature based control
-            if room_temp >= target_temp:
-                return {
-                    "status": "target_reached",
-                    "reason": f"Room {room_temp}°C ≥ target {target_temp}°C - valve closed",
-                }
-            elif return_temp >= close_threshold:
-                return {
-                    "status": "return_high",
-                    "reason": f"Room {room_temp}°C < target {target_temp}°C but return {return_temp}°C ≥ {close_threshold}°C - valve closed",
-                }
-            elif return_temp <= open_threshold:
-                return {
-                    "status": "heating",
-                    "reason": f"Room {room_temp}°C < target {target_temp}°C, return {return_temp}°C ≤ {open_threshold}°C - valve {valve_position}%",
-                }
+        # Conservative control logic with buffer zone
+        temp_buffer = 1.0  # 1°C buffer zone
+        conservative_threshold = close_threshold - temp_buffer
+
+        if return_temp >= close_threshold:
+            return {
+                "status": "return_high",
+                "reason": f"Return temp {return_temp}°C ≥ {close_threshold}°C - heating stopped",
+            }
+        elif return_temp >= conservative_threshold:
+            # In buffer zone - conservative heating
+            if room_temp is not None and target_temp is not None:
+                if room_temp >= target_temp:
+                    return {
+                        "status": "target_reached",
+                        "reason": f"Room {room_temp}°C ≥ target {target_temp}°C, return {return_temp}°C in buffer zone - conservative control (valve {valve_position}%)",
+                    }
+                else:
+                    return {
+                        "status": "conservative_heating",
+                        "reason": f"Room {room_temp}°C < target {target_temp}°C, return {return_temp}°C near threshold ({conservative_threshold:.1f}-{close_threshold}°C) - reduced valve (valve {valve_position}%)",
+                    }
             else:
                 return {
-                    "status": "between_thresholds",
-                    "reason": f"Return temp {return_temp}°C between {open_threshold}-{close_threshold}°C - valve {valve_position}%",
+                    "status": "conservative_heating",
+                    "reason": f"Return {return_temp}°C near threshold ({conservative_threshold:.1f}-{close_threshold}°C) - reduced valve {valve_position}% (no room temp)",
                 }
         else:
-            # Fallback to return temp only
-            if return_temp >= close_threshold:
-                return {
-                    "status": "return_high",
-                    "reason": f"Return {return_temp}°C ≥ {close_threshold}°C - valve closed (no room temp)",
-                }
-            elif return_temp <= open_threshold:
-                return {
-                    "status": "heating",
-                    "reason": f"Return {return_temp}°C ≤ {open_threshold}°C - valve {valve_position}% (no room temp)",
-                }
+            # Safe zone - normal heating
+            if room_temp is not None and target_temp is not None:
+                if room_temp >= target_temp:
+                    return {
+                        "status": "target_reached",
+                        "reason": f"Room {room_temp}°C ≥ target {target_temp}°C, return {return_temp}°C safe - PID control (valve {valve_position}%)",
+                    }
+                else:
+                    return {
+                        "status": "heating",
+                        "reason": f"Room {room_temp}°C < target {target_temp}°C, return {return_temp}°C < {conservative_threshold:.1f}°C - full PID control (valve {valve_position}%)",
+                    }
             else:
                 return {
-                    "status": "between_thresholds",
-                    "reason": f"Return {return_temp}°C between {open_threshold}-{close_threshold}°C - valve {valve_position}%",
+                    "status": "heating",
+                    "reason": f"Return {return_temp}°C < {conservative_threshold:.1f}°C - conservative valve {valve_position}% (no room temp)",
                 }
 
     async def async_set_valve_position(self, trv_entity_id: str, position: int) -> None:

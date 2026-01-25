@@ -109,13 +109,6 @@ def get_trv_schema() -> vol.Schema:
                     min=0, max=2.0, step=0.1, unit_of_measurement="°C", mode="box"
                 )
             ),
-            vol.Optional(
-                CONF_MIN_VALVE_POSITION, default=0
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=0, max=100, step=1, unit_of_measurement="%"
-                )
-            ),
         }
     )
 

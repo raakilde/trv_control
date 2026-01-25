@@ -29,6 +29,7 @@ DEFAULT_RETURN_TEMP_CLOSE = (
 )
 DEFAULT_RETURN_TEMP_OPEN = 30.0  # Keep low for efficiency
 DEFAULT_MAX_VALVE_POSITION = 100
+DEFAULT_MIN_VALVE_POSITION = 0
 DEFAULT_MIN_VALVE_POSITION_DELTA = 5  # Default delta for max open % above min
 DEFAULT_ANTICIPATORY_OFFSET = 0.3  # Reduced from 0.5°C - less aggressive anticipation
 
