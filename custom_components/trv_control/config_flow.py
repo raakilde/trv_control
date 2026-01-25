@@ -26,6 +26,7 @@ from .const import (
     CONF_WINDOW_SENSOR,
     DEFAULT_ANTICIPATORY_OFFSET,
     DEFAULT_MAX_VALVE_POSITION,
+    DEFAULT_PROPORTIONAL_BAND,
     DEFAULT_RETURN_TEMP_CLOSE,
     DEFAULT_RETURN_TEMP_OPEN,
     DOMAIN,
@@ -101,6 +102,18 @@ def get_trv_schema() -> vol.Schema:
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=0, max=2.0, step=0.1, unit_of_measurement="°C", mode="box"
+                )
+            ),
+            vol.Optional("min_pid_valve_position", default=0): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=100, step=1, unit_of_measurement="%"
+                )
+            ),
+            vol.Optional(
+                "max_pid_valve_position", default=100
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=100, step=1, unit_of_measurement="%"
                 )
             ),
         }
@@ -396,6 +409,54 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                                     step=0.1,
                                     unit_of_measurement="°C",
                                     mode="box",
+                                )
+                            ),
+                            vol.Required(
+                                "proportional_band",
+                                default=trv.get(
+                                    "proportional_band", DEFAULT_PROPORTIONAL_BAND
+                                ),
+                            ): selector.NumberSelector(
+                                selector.NumberSelectorConfig(
+                                    min=0.5,
+                                    max=10,
+                                    step=0.1,
+                                    unit_of_measurement="°C",
+                                    mode="box",
+                                )
+                            ),
+                            vol.Required(
+                                "pid_anticipatory_offset",
+                                default=trv.get(
+                                    "pid_anticipatory_offset",
+                                    trv.get(
+                                        CONF_ANTICIPATORY_OFFSET,
+                                        DEFAULT_ANTICIPATORY_OFFSET,
+                                    ),
+                                ),
+                            ): selector.NumberSelector(
+                                selector.NumberSelectorConfig(
+                                    min=0,
+                                    max=2.0,
+                                    step=0.1,
+                                    unit_of_measurement="°C",
+                                    mode="box",
+                                )
+                            ),
+                            vol.Optional(
+                                "min_pid_valve_position",
+                                default=trv.get("min_pid_valve_position", 0),
+                            ): selector.NumberSelector(
+                                selector.NumberSelectorConfig(
+                                    min=0, max=100, step=1, unit_of_measurement="%"
+                                )
+                            ),
+                            vol.Optional(
+                                "max_pid_valve_position",
+                                default=trv.get("max_pid_valve_position", 100),
+                            ): selector.NumberSelector(
+                                selector.NumberSelectorConfig(
+                                    min=0, max=100, step=1, unit_of_measurement="%"
                                 )
                             ),
                         }
