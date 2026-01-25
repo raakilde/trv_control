@@ -32,6 +32,8 @@ from .const import (
     DOMAIN,
 )
 
+
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -91,26 +93,30 @@ def get_trv_schema() -> vol.Schema:
                 )
             ),
             vol.Optional(
-                "proportional_band", default=DEFAULT_PROPORTIONAL_BAND
+                CONF_PROPORTIONAL_BAND, default=DEFAULT_PROPORTIONAL_BAND
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=0.5, max=10, step=0.1, unit_of_measurement="°C", mode="box"
                 )
             ),
             vol.Optional(
-                "pid_anticipatory_offset", default=DEFAULT_ANTICIPATORY_OFFSET
+                CONF_PID_ANTICIPATORY_OFFSET, default=DEFAULT_ANTICIPATORY_OFFSET
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=0, max=2.0, step=0.1, unit_of_measurement="°C", mode="box"
                 )
             ),
-            vol.Optional("min_pid_valve_position", default=0): selector.NumberSelector(
+            vol.Required(
+                CONF_MIN_PID_VALVE_POSITION,
+                default=0,
+            ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=0, max=100, step=1, unit_of_measurement="%"
                 )
             ),
             vol.Optional(
-                "max_pid_valve_position", default=100
+                CONF_MAX_PID_VALVE_POSITION,
+                default=100,
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=0, max=100, step=1, unit_of_measurement="%"
@@ -307,6 +313,18 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                             CONF_ANTICIPATORY_OFFSET: user_input.get(
                                 CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
                             ),
+                            CONF_PROPORTIONAL_BAND: user_input.get(
+                                CONF_PROPORTIONAL_BAND, DEFAULT_PROPORTIONAL_BAND
+                            ),
+                            CONF_PID_ANTICIPATORY_OFFSET: user_input.get(
+                                CONF_PID_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
+                            ),
+                            CONF_MIN_PID_VALVE_POSITION: user_input.get(
+                                CONF_MIN_PID_VALVE_POSITION, 0
+                            ),
+                            CONF_MAX_PID_VALVE_POSITION: user_input.get(
+                                CONF_MAX_PID_VALVE_POSITION, 100
+                            ),
                         }
 
                         if CONF_TRVS not in room:
@@ -412,9 +430,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                                 )
                             ),
                             vol.Required(
-                                "proportional_band",
+                                CONF_PROPORTIONAL_BAND,
                                 default=trv.get(
-                                    "proportional_band", DEFAULT_PROPORTIONAL_BAND
+                                    CONF_PROPORTIONAL_BAND, DEFAULT_PROPORTIONAL_BAND
                                 ),
                             ): selector.NumberSelector(
                                 selector.NumberSelectorConfig(
@@ -426,9 +444,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                                 )
                             ),
                             vol.Required(
-                                "pid_anticipatory_offset",
+                                CONF_PID_ANTICIPATORY_OFFSET,
                                 default=trv.get(
-                                    "pid_anticipatory_offset",
+                                    CONF_PID_ANTICIPATORY_OFFSET,
                                     trv.get(
                                         CONF_ANTICIPATORY_OFFSET,
                                         DEFAULT_ANTICIPATORY_OFFSET,
@@ -444,16 +462,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                                 )
                             ),
                             vol.Optional(
-                                "min_pid_valve_position",
-                                default=trv.get("min_pid_valve_position", 0),
+                                CONF_MIN_PID_VALVE_POSITION,
+                                default=trv.get(CONF_MIN_PID_VALVE_POSITION, 0),
                             ): selector.NumberSelector(
                                 selector.NumberSelectorConfig(
                                     min=0, max=100, step=1, unit_of_measurement="%"
                                 )
                             ),
                             vol.Optional(
-                                "max_pid_valve_position",
-                                default=trv.get("max_pid_valve_position", 100),
+                                CONF_MAX_PID_VALVE_POSITION,
+                                default=trv.get(CONF_MAX_PID_VALVE_POSITION, 100),
                             ): selector.NumberSelector(
                                 selector.NumberSelectorConfig(
                                     min=0, max=100, step=1, unit_of_measurement="%"
@@ -503,27 +521,27 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                                 CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
                             ),
                         )
-                        trv["proportional_band"] = user_input.get(
-                            "proportional_band",
-                            trv.get("proportional_band", DEFAULT_PROPORTIONAL_BAND),
+                        trv[CONF_PROPORTIONAL_BAND] = user_input.get(
+                            CONF_PROPORTIONAL_BAND,
+                            trv.get(CONF_PROPORTIONAL_BAND, DEFAULT_PROPORTIONAL_BAND),
                         )
-                        trv["pid_anticipatory_offset"] = user_input.get(
-                            "pid_anticipatory_offset",
+                        trv[CONF_PID_ANTICIPATORY_OFFSET] = user_input.get(
+                            CONF_PID_ANTICIPATORY_OFFSET,
                             trv.get(
-                                "pid_anticipatory_offset",
+                                CONF_PID_ANTICIPATORY_OFFSET,
                                 trv.get(
                                     CONF_ANTICIPATORY_OFFSET,
                                     DEFAULT_ANTICIPATORY_OFFSET,
                                 ),
                             ),
                         )
-                        trv["min_pid_valve_position"] = user_input.get(
-                            "min_pid_valve_position",
-                            trv.get("min_pid_valve_position", 0),
+                        trv[CONF_MIN_PID_VALVE_POSITION] = user_input.get(
+                            CONF_MIN_PID_VALVE_POSITION,
+                            trv.get(CONF_MIN_PID_VALVE_POSITION, 0),
                         )
-                        trv["max_pid_valve_position"] = user_input.get(
-                            "max_pid_valve_position",
-                            trv.get("max_pid_valve_position", 100),
+                        trv[CONF_MAX_PID_VALVE_POSITION] = user_input.get(
+                            CONF_MAX_PID_VALVE_POSITION,
+                            trv.get(CONF_MAX_PID_VALVE_POSITION, 100),
                         )
                         break
 
