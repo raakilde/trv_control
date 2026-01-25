@@ -24,10 +24,10 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_ANTICIPATORY_OFFSET,
-    CONF_MAX_PID_VALVE_POSITION,
     CONF_MAX_VALVE_POSITION,
-    CONF_MIN_PID_VALVE_POSITION,
     CONF_PID_ANTICIPATORY_OFFSET,
+    CONF_PID_VALVE_MAX_POSITION,
+    CONF_PID_VALVE_MIN_POSITION,
     CONF_PROPORTIONAL_BAND,
     CONF_RETURN_TEMP,
     CONF_RETURN_TEMP_CLOSE,
@@ -479,10 +479,10 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         # Get configuration for this TRV (needed for failsafe)
         current_valve_position = trv_state["valve_position"]
         min_pid_valve_position = trv_config.get(
-            CONF_MIN_PID_VALVE_POSITION, current_valve_position
+            CONF_PID_VALVE_MIN_POSITION, current_valve_position
         )
         max_pid_valve_position = trv_config.get(
-            CONF_MAX_PID_VALVE_POSITION,
+            CONF_PID_VALVE_MAX_POSITION,
             min_pid_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA,
         )
 
@@ -509,7 +509,9 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                             time_since_update / 60,
                             max_pid_valve_position,
                         )
-                        await self._async_set_valve_position(trv_id, max_pid_valve_position)
+                        await self._async_set_valve_position(
+                            trv_id, max_pid_valve_position
+                        )
                         await self._async_send_temperature_to_trv(trv_id, target_temp)
                         await self._async_nudge_trv_if_idle(trv_id, target_temp)
                         trv_state["valve_control_active"] = True
@@ -1011,10 +1013,10 @@ class TRVClimate(ClimateEntity, RestoreEntity):
 
             # Expose PID and valve range config as attributes
             min_pid_valve_position = trv.get(
-                CONF_MIN_PID_VALVE_POSITION, trv_state["valve_position"]
+                CONF_PID_VALVE_MIN_POSITION, trv_state["valve_position"]
             )
             max_pid_valve_position = trv.get(
-                CONF_MAX_PID_VALVE_POSITION,
+                CONF_PID_VALVE_MAX_POSITION,
                 min_pid_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA,
             )
             attrs[f"{prefix}_min_pid_valve_position"] = min_pid_valve_position

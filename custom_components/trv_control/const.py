@@ -21,8 +21,8 @@ CONF_ANTICIPATORY_OFFSET = "anticipatory_offset"
 # PID/Advanced TRV config constants
 CONF_PROPORTIONAL_BAND = "proportional_band"
 CONF_PID_ANTICIPATORY_OFFSET = "pid_anticipatory_offset"
-CONF_MIN_PID_VALVE_POSITION = "min_pid_valve_position"
-CONF_MAX_PID_VALVE_POSITION = "max_pid_valve_position"
+CONF_PID_VALVE_MIN_POSITION = "pid_valve_min_position"
+CONF_PID_VALVE_MAX_POSITION = "pid_valve_max_position"
 
 # Defaults
 DEFAULT_NAME = "TRV Control"
