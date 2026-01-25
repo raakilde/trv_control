@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 from datetime import timedelta
 from typing import Any
@@ -14,6 +16,7 @@ from homeassistant.components.climate import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_track_state_change_event,
@@ -197,10 +200,10 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             "avg_temp_accuracy": None,
             "max_temp_deviation": 0,
             "efficiency_score": 100.0,
-            "control_stability": 100.0
+            "control_stability": 100.0,
         }
         self._performance_history_size = 100  # Keep last 100 measurements
-        
+
         self._unsub_state_changed = None
         self._unsub_temp_update = None
 
@@ -246,20 +249,20 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     self._attr_current_temperature
                 )
 
-                # Also check and send target temp to any TRVs that should be heating
+                # Also send target temp and control valves when in heating mode
                 if (
                     self._attr_hvac_mode == HVACMode.HEAT
                     and self._attr_target_temperature is not None
                 ):
-                    for trv in self._trvs:
-                        trv_id = trv[CONF_TRV]
-                        trv_state = self._trv_states[trv_id]
+                    # Get adjusted temperature (considering night saving)
+                    adjusted_temp = self._get_adjusted_target_temperature()
 
-                        # If valve is open, send target temperature
-                        if trv_state["valve_position"] > 0:
-                            await self._async_send_temperature_to_trv(
-                                trv_id, self._attr_target_temperature
-                            )
+                    # Send target temperature directly to all TRVs (Z2M compatibility)
+                    await self._async_send_temperature_to_all_trvs(adjusted_temp)
+
+                    # Initialize/update valve positions for all TRVs
+                    for trv_config in self._trvs:
+                        await self._async_control_valve(trv_config)
             else:
                 _LOGGER.warning(
                     "[%s] Cannot send temperature - sensor value not available yet",
@@ -313,11 +316,21 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                         self._update_temperature_history(
                             new_temp, new_state.last_updated
                         )
-                        
+
                         # Track temperature deviation for performance monitoring
                         if self._attr_target_temperature:
                             temp_deviation = new_temp - self._attr_target_temperature
-                            self._update_performance_stats(action_type=None, temp_deviation=temp_deviation)
+                            self._update_performance_stats(
+                                action_type=None, temp_deviation=temp_deviation
+                            )
+
+                        # Periodically validate TRV states (every 10 temperature updates)
+                        if not hasattr(self, "_validation_counter"):
+                            self._validation_counter = 0
+                        self._validation_counter += 1
+                        if self._validation_counter >= 10:
+                            self._validation_counter = 0
+                            self.hass.async_create_task(self.async_validate_all_trvs())
 
                         # Send updated room temperature to all TRVs
                         self.hass.async_create_task(
@@ -325,6 +338,11 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                                 self._attr_current_temperature
                             )
                         )
+                        
+                        # Trigger valve control for all TRVs when room temperature changes
+                        if self._attr_hvac_mode == HVACMode.HEAT:
+                            for trv_config in self._trvs:
+                                self.hass.async_create_task(self._async_control_valve(trv_config))
                 except (ValueError, TypeError):
                     pass
 
@@ -356,7 +374,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                 window_state = new_state.state
                 old_window_state = self._window_open
                 self._window_open = window_state in ["on", "open", "true", True]
-                
+
                 # Track window open events for performance monitoring
                 if self._window_open and not old_window_state:
                     self._update_performance_stats("window_open")
@@ -529,12 +547,40 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         """
         temp_diff = target_temp - room_temp
         effective_diff = temp_diff - anticipatory_offset
+        
+        _LOGGER.info(
+            "[%s] PID calc: room=%.1f°C, target=%.1f°C, diff=%.2f°C, anticipatory=%.2f°C, effective_diff=%.2f°C, band=%.2f°C, max_valve=%d%%",
+            self._attr_name,
+            room_temp,
+            target_temp, 
+            temp_diff,
+            anticipatory_offset,
+            effective_diff,
+            proportional_band,
+            max_valve_position,
+        )
+        
         if effective_diff <= 0:
+            _LOGGER.info("[%s] PID result: effective_diff <= 0, valve = 0%%", self._attr_name)
             return 0
+            
         valve_position = int((effective_diff / proportional_band) * max_valve_position)
         valve_position = max(0, min(max_valve_position, valve_position))
-        if valve_position < 10:
+        
+        # Use percentage-based minimum instead of hardcoded 10%
+        # For 8% max valve, minimum would be 1% (12.5% of max)
+        min_valve_threshold = max(1, int(max_valve_position * 0.125))  # 12.5% of max
+        if valve_position < min_valve_threshold:
             valve_position = 0
+            
+        _LOGGER.info(
+            "[%s] PID result: raw_calc=%d%%, after_limits=%d%%, min_threshold=%d%% (final=%d%%)",
+            self._attr_name,
+            int((effective_diff / proportional_band) * max_valve_position),
+            max(0, min(max_valve_position, int((effective_diff / proportional_band) * max_valve_position))),
+            min_valve_threshold,
+            valve_position,
+        )
         _LOGGER.debug(
             "[%s] Proportional control: temp_diff=%.2f°C, effective_diff=%.2f°C, valve=%d%% (max=%d%%, band=%.2f)",
             self._attr_name,
@@ -558,11 +604,25 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         trv_state = self._trv_states[trv_id]
         return_temp = trv_state["return_temp"]
 
-        if return_temp is None:
-            return
+        _LOGGER.info(
+            "Valve control for %s: return_temp=%s, hvac_mode=%s, window_open=%s, room_temp=%s, target_temp=%s",
+            trv_id,
+            return_temp,
+            self._attr_hvac_mode,
+            self._window_open,
+            self._attr_current_temperature,
+            self._attr_target_temperature,
+        )
 
         # Don't control if window is open or HVAC is off
         if self._window_open or self._attr_hvac_mode == HVACMode.OFF:
+            _LOGGER.info("Valve control skipped for %s: window_open=%s, hvac_mode=%s", trv_id, self._window_open, self._attr_hvac_mode)
+            return
+
+        # If no return temp available, use room temp based logic as fallback
+        if return_temp is None:
+            _LOGGER.warning("No return temp for %s, using room temp based fallback logic", trv_id)
+            await self._async_control_valve_fallback(trv_config)
             return
 
         # Get configuration for this TRV
@@ -571,6 +631,14 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         )
         close_threshold = trv_config.get(
             CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE
+        )
+
+        _LOGGER.debug(
+            "Valve control for %s: return_temp=%.1f°C, close_threshold=%.1f°C, max_valve=%d%%",
+            trv_id,
+            return_temp,
+            close_threshold,
+            max_valve_position,
         )
 
         # Conservative approach: create a buffer zone before the threshold
@@ -680,6 +748,50 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                         conservative_position,
                         trv_id,
                     )
+
+    async def _async_control_valve_fallback(self, trv_config: dict[str, Any]) -> None:
+        """Fallback valve control when return temperature is not available."""
+        trv_id = trv_config[CONF_TRV]
+        trv_state = self._trv_states[trv_id]
+        room_temp = self._attr_current_temperature
+        target_temp = self._get_adjusted_target_temperature()
+
+        if room_temp is None or target_temp is None:
+            _LOGGER.warning("Cannot control valve for %s - no room temp or target temp available", trv_id)
+            return
+
+        max_valve_position = trv_config.get(
+            CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION
+        )
+
+        # Simple proportional control based on room temp vs target temp
+        temp_diff = target_temp - room_temp
+        
+        if temp_diff <= 0:
+            # Room is at or above target - close valve
+            desired_position = 0
+        elif temp_diff >= 2.0:
+            # Room is 2+ degrees below target - open valve to max
+            desired_position = max_valve_position
+        else:
+            # Proportional control for small differences (0-2°C)
+            proportion = temp_diff / 2.0  # 0.0 to 1.0
+            desired_position = int(max_valve_position * proportion)
+            desired_position = max(10, desired_position)  # Minimum 10%
+
+        _LOGGER.info(
+            "Fallback valve control for %s: room_temp=%.1f°C, target_temp=%.1f°C, diff=%.1f°C, valve=%d%%",
+            trv_id,
+            room_temp,
+            target_temp,
+            temp_diff,
+            desired_position,
+        )
+
+        if trv_state["valve_position"] != desired_position:
+            await self._async_set_valve_position(trv_id, desired_position)
+            trv_state["valve_control_active"] = True
+            self._update_performance_stats("valve_adjustment")
 
     async def _async_nudge_trv_if_idle(self, trv_id: str, target_temp: float) -> None:
         """Check if TRV is idle when it should be heating, and force it to use external sensor.
@@ -796,15 +908,31 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         # Fallback to MQTT if no entity found
         if not position_set:
             try:
-                # Sonoff uses "valve_opening_degree" attribute
-                topic = f"zigbee2mqtt/{device_name}/set"
-                payload = f'{{"valve_opening_degree": {position}}}'
+                # Get proper Z2M device name from device registry
+                device_registry = dr.async_get(self.hass)
+                device = device_registry.async_get_device_by_entity_id(trv_id)
+                
+                z2m_device_name = None
+                if device and device.identifiers:
+                    for identifier_set in device.identifiers:
+                        if identifier_set[0] == "zigbee2mqtt":
+                            z2m_device_name = identifier_set[1]
+                            break
+                
+                if not z2m_device_name:
+                    # Fallback to simple device name extraction
+                    z2m_device_name = device_name
+
+                # Use proper JSON for Z2M
+                topic = f"zigbee2mqtt/{z2m_device_name}/set"
+                payload = {"valve_opening_degree": position}
 
                 _LOGGER.info(
-                    "Setting valve via MQTT for %s: topic=%s, payload=%s",
+                    "Setting valve via Z2M MQTT for %s: device=%s, topic=%s, position=%d%%",
                     trv_id,
+                    z2m_device_name,
                     topic,
-                    payload,
+                    position,
                 )
 
                 if self.hass.services.has_service("mqtt", "publish"):
@@ -813,13 +941,14 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                         "publish",
                         {
                             "topic": topic,
-                            "payload": payload,
+                            "payload": json.dumps(payload),
                         },
-                        blocking=False,
+                        blocking=True,  # Make it blocking to ensure command is sent
                     )
+                    _LOGGER.info("Z2M valve command sent successfully to %s", z2m_device_name)
                 else:
-                    _LOGGER.info(
-                        "TRV %s: No valve control available - number entity not found and MQTT not configured. Valve position control disabled.",
+                    _LOGGER.error(
+                        "TRV %s: No valve control available - number entity not found and MQTT not configured.",
                         trv_id,
                     )
             except Exception as e:
@@ -967,6 +1096,103 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         for trv in self._trvs:
             await self._async_send_temperature_to_trv(trv[CONF_TRV], temperature)
 
+    async def _async_send_temperature_to_all_trvs(self, temperature: float) -> None:
+        """Send temperature setpoint directly to all TRVs for Z2M compatibility."""
+        for trv_config in self._trvs:
+            trv_entity_id = trv_config[CONF_TRV]
+            try:
+                # First try direct Z2M method (preferred for Sonoff)
+                await self._async_send_temperature_via_z2m(trv_entity_id, temperature)
+                await asyncio.sleep(0.1)  # Brief delay between TRV updates
+
+                # Verify if temperature was set correctly
+                if not await self._async_verify_temperature_set(
+                    trv_entity_id, temperature
+                ):
+                    _LOGGER.warning(
+                        f"TRV {trv_entity_id} did not accept Z2M setpoint, trying climate service"
+                    )
+                    # Fallback to standard HA climate service
+                    await self._async_send_temperature_to_trv(
+                        trv_entity_id, temperature
+                    )
+
+            except Exception as e:
+                _LOGGER.warning(
+                    f"Failed to set temperature for TRV {trv_entity_id}: {e}"
+                )
+
+    async def _async_send_temperature_via_z2m(
+        self, trv_entity_id: str, temperature: float
+    ) -> None:
+        """Send temperature setpoint directly via Zigbee2MQTT topic."""
+        try:
+            # Get device registry
+            device_registry = dr.async_get(self.hass)
+            device = device_registry.async_get_device_by_entity_id(trv_entity_id)
+
+            if not device or not device.identifiers:
+                _LOGGER.debug(f"No device found for TRV entity {trv_entity_id}")
+                return
+
+            # Get Z2M device name from identifiers
+            z2m_device = None
+            for identifier_set in device.identifiers:
+                if identifier_set[0] == "zigbee2mqtt":
+                    z2m_device = identifier_set[1]
+                    break
+
+            if not z2m_device:
+                _LOGGER.debug(f"No Z2M identifier found for device {trv_entity_id}")
+                return
+
+            # Send directly to Z2M topic
+            topic = f"zigbee2mqtt/{z2m_device}/set"
+            payload = {"occupied_heating_setpoint": temperature}
+
+            await self.hass.services.async_call(
+                "mqtt",
+                "publish",
+                {"topic": topic, "payload": json.dumps(payload)},
+                blocking=True,
+            )
+
+            _LOGGER.info(
+                f"Sent temperature {temperature}°C to {z2m_device} via Z2M MQTT"
+            )
+
+        except Exception as e:
+            _LOGGER.error(f"Failed to send temperature via Z2M to {trv_entity_id}: {e}")
+            raise
+
+    async def _async_verify_temperature_set(
+        self, trv_entity_id: str, expected_temp: float
+    ) -> bool:
+        """Verify if temperature was set correctly on the TRV."""
+        try:
+            await asyncio.sleep(2)  # Wait for TRV to update
+
+            trv_state = self.hass.states.get(trv_entity_id)
+            if not trv_state:
+                return False
+
+            actual_temp = trv_state.attributes.get("temperature")
+            if actual_temp is None:
+                return False
+
+            # Check within tolerance
+            tolerance = 0.5
+            success = abs(actual_temp - expected_temp) <= tolerance
+
+            _LOGGER.debug(
+                f"Temperature verification for {trv_entity_id}: expected {expected_temp}°C, got {actual_temp}°C, success: {success}"
+            )
+            return success
+
+        except Exception as e:
+            _LOGGER.error(f"Failed to verify temperature for {trv_entity_id}: {e}")
+            return False
+
     async def _async_send_temperature_to_trv(
         self, trv_id: str, temperature: float
     ) -> None:
@@ -988,13 +1214,17 @@ class TRVClimate(ClimateEntity, RestoreEntity):
 
         old_target = self._attr_target_temperature
         self._attr_target_temperature = temperature
-        
+
         # Track temperature control action
         if old_target and self._attr_current_temperature:
             temp_deviation = self._attr_current_temperature - temperature
             self._update_performance_stats("control_action", temp_deviation)
 
-        # Trigger valve control for all TRVs to re-evaluate with new target
+        # Send target temperature directly to all TRVs (for Z2M compatibility)
+        adjusted_temp = self._get_adjusted_target_temperature()
+        await self._async_send_temperature_to_all_trvs(adjusted_temp)
+
+        # Also trigger valve control for all TRVs to re-evaluate with new target
         # Valve control will send appropriate setpoint (5°C or 35°C) based on logic
         for trv in self._trvs:
             await self._async_control_valve(trv)
@@ -1141,6 +1371,32 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             attrs[f"{prefix}_status"] = trv_status["status"]
             attrs[f"{prefix}_status_reason"] = trv_status["reason"]
 
+            # Add TRV validation results
+            validation_result = self._validate_trv_state(trv, trv_state)
+            attrs[f"{prefix}_setpoint_valid"] = validation_result["setpoint_valid"]
+            attrs[f"{prefix}_valve_position_valid"] = validation_result[
+                "valve_position_valid"
+            ]
+            attrs[f"{prefix}_actual_setpoint"] = validation_result["actual_setpoint"]
+            attrs[f"{prefix}_expected_setpoint"] = validation_result[
+                "expected_setpoint"
+            ]
+            attrs[f"{prefix}_actual_valve_position"] = validation_result[
+                "actual_valve_position"
+            ]
+            attrs[f"{prefix}_expected_valve_position"] = validation_result[
+                "expected_valve_position"
+            ]
+
+            if validation_result["setpoint_deviation"] is not None:
+                attrs[f"{prefix}_setpoint_deviation"] = round(
+                    validation_result["setpoint_deviation"], 1
+                )
+            if validation_result["valve_position_deviation"] is not None:
+                attrs[f"{prefix}_valve_position_deviation"] = round(
+                    validation_result["valve_position_deviation"], 0
+                )
+
         # Add night saving attributes
         attrs["night_saving_enabled"] = self._night_saving_enabled
         attrs["night_start_time"] = self._night_start_time
@@ -1149,7 +1405,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         attrs["night_saving_active"] = self._night_saving_active
         if self._night_saving_active:
             attrs["adjusted_target_temp"] = self._get_adjusted_target_temperature()
-        
+
         # Add performance monitoring attributes
         perf_summary = self._get_performance_summary()
         attrs["performance_efficiency_score"] = perf_summary["efficiency_score"]
@@ -1158,31 +1414,39 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         attrs["performance_control_stability"] = perf_summary["control_stability"]
         attrs["performance_total_actions"] = perf_summary["total_actions"]
         attrs["performance_valve_adjustments"] = perf_summary["valve_adjustments"]
-        
+
         if "actions_per_hour" in perf_summary:
             attrs["performance_actions_per_hour"] = perf_summary["actions_per_hour"]
         if "adjustments_per_hour" in perf_summary:
-            attrs["performance_adjustments_per_hour"] = perf_summary["adjustments_per_hour"]
+            attrs["performance_adjustments_per_hour"] = perf_summary[
+                "adjustments_per_hour"
+            ]
         if "avg_temp_deviation" in perf_summary:
             attrs["performance_avg_temp_deviation"] = perf_summary["avg_temp_deviation"]
         if "max_temp_deviation" in perf_summary:
             attrs["performance_max_temp_deviation"] = perf_summary["max_temp_deviation"]
         if "avg_response_time" in perf_summary:
             attrs["performance_avg_response_time"] = perf_summary["avg_response_time"]
-        
+
         # Add raw performance stats for advanced monitoring
-        attrs["performance_night_saving_uses"] = self._performance_stats["night_saving_activations"]
-        attrs["performance_window_events"] = self._performance_stats["window_open_events"]
-        attrs["performance_heating_changes"] = self._performance_stats["heating_status_changes"]
-        
+        attrs["performance_night_saving_uses"] = self._performance_stats[
+            "night_saving_activations"
+        ]
+        attrs["performance_window_events"] = self._performance_stats[
+            "window_open_events"
+        ]
+        attrs["performance_heating_changes"] = self._performance_stats[
+            "heating_status_changes"
+        ]
+
         return attrs
 
     async def async_reset_performance_stats(self) -> None:
         """Reset performance monitoring statistics."""
         from homeassistant.util import dt as dt_util
-        
+
         _LOGGER.info("Resetting performance statistics for %s", self._attr_name)
-        
+
         self._performance_stats = {
             "start_time": dt_util.now(),
             "total_control_actions": 0,
@@ -1199,75 +1463,136 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             "avg_temp_accuracy": None,
             "max_temp_deviation": 0,
             "efficiency_score": 100.0,
-            "control_stability": 100.0
+            "control_stability": 100.0,
         }
-        
+
         # Trigger state update to reflect reset statistics
         self.async_write_ha_state()
 
-    def _update_performance_stats(self, action_type: str = None, temp_deviation: float = None) -> None:
+    async def async_validate_all_trvs(self) -> dict:
+        """Validate all TRVs and return validation summary."""
+        validation_summary = {
+            "total_trvs": len(self._trvs),
+            "valid_setpoints": 0,
+            "valid_valve_positions": 0,
+            "invalid_trvs": [],
+        }
+
+        for trv in self._trvs:
+            trv_id = trv[CONF_TRV]
+            trv_state = self._trv_states[trv_id]
+            validation_result = self._validate_trv_state(trv, trv_state)
+
+            if validation_result["setpoint_valid"]:
+                validation_summary["valid_setpoints"] += 1
+            if validation_result["valve_position_valid"]:
+                validation_summary["valid_valve_positions"] += 1
+
+            if (
+                not validation_result["setpoint_valid"]
+                or not validation_result["valve_position_valid"]
+            ):
+                validation_summary["invalid_trvs"].append(
+                    {
+                        "entity_id": trv_id,
+                        "setpoint_valid": validation_result["setpoint_valid"],
+                        "valve_position_valid": validation_result[
+                            "valve_position_valid"
+                        ],
+                        "setpoint_deviation": validation_result["setpoint_deviation"],
+                        "valve_position_deviation": validation_result[
+                            "valve_position_deviation"
+                        ],
+                    }
+                )
+
+        _LOGGER.info(
+            "TRV validation summary for %s: %d/%d setpoints valid, %d/%d valve positions valid",
+            self._attr_name,
+            validation_summary["valid_setpoints"],
+            validation_summary["total_trvs"],
+            validation_summary["valid_valve_positions"],
+            validation_summary["total_trvs"],
+        )
+
+        return validation_summary
+
+    def _update_performance_stats(
+        self, action_type: str = None, temp_deviation: float = None
+    ) -> None:
         """Update performance statistics for monitoring."""
         now = dt_util.now()
         stats = self._performance_stats
-        
+
         if action_type == "control_action":
             stats["total_control_actions"] += 1
             stats["last_control_action"] = now
-            
+
             # Track response time if we have current and target temps
-            if (self._attr_current_temperature and self._attr_target_temperature and
-                temp_deviation is not None):
-                response_time = abs(temp_deviation) * 60  # Rough estimate: 1°C = 60min response
+            if (
+                self._attr_current_temperature
+                and self._attr_target_temperature
+                and temp_deviation is not None
+            ):
+                response_time = (
+                    abs(temp_deviation) * 60
+                )  # Rough estimate: 1°C = 60min response
                 stats["control_response_times"].append(response_time)
-                if len(stats["control_response_times"]) > self._performance_history_size:
+                if (
+                    len(stats["control_response_times"])
+                    > self._performance_history_size
+                ):
                     stats["control_response_times"].pop(0)
-        
+
         elif action_type == "valve_adjustment":
             stats["valve_adjustments"] += 1
-            
+
         elif action_type == "night_saving_activation":
             stats["night_saving_activations"] += 1
-            
+
         elif action_type == "window_open":
             stats["window_open_events"] += 1
-            
+
         elif action_type == "heating_status_change":
             stats["heating_status_changes"] += 1
-        
+
         # Update temperature deviation tracking
-        if (temp_deviation is not None and 
-            self._attr_current_temperature is not None and 
-            self._attr_target_temperature is not None):
-            
+        if (
+            temp_deviation is not None
+            and self._attr_current_temperature is not None
+            and self._attr_target_temperature is not None
+        ):
             deviation = abs(temp_deviation)
             stats["temp_deviations"].append(deviation)
             if len(stats["temp_deviations"]) > self._performance_history_size:
                 stats["temp_deviations"].pop(0)
-            
+
             # Update max deviation
             if deviation > stats["max_temp_deviation"]:
                 stats["max_temp_deviation"] = deviation
-            
+
             # Calculate average accuracy (smaller deviation = better accuracy)
             if stats["temp_deviations"]:
-                avg_deviation = sum(stats["temp_deviations"]) / len(stats["temp_deviations"])
+                avg_deviation = sum(stats["temp_deviations"]) / len(
+                    stats["temp_deviations"]
+                )
                 # Convert to accuracy percentage (0°C deviation = 100%, 5°C deviation = 0%)
                 stats["avg_temp_accuracy"] = max(0, 100 - (avg_deviation * 20))
-        
+
         # Calculate efficiency score based on multiple factors
         self._calculate_efficiency_score()
-        
+
         stats["last_deviation_check"] = now
-    
+
     def _calculate_efficiency_score(self) -> None:
         """Calculate overall control efficiency score."""
         stats = self._performance_stats
         score = 100.0
-        
+
         # Temperature accuracy factor (50% weight)
         if stats["avg_temp_accuracy"] is not None:
             score = score * 0.5 + stats["avg_temp_accuracy"] * 0.5
-        
+
         # Control stability factor (30% weight) - fewer adjustments = more stable
         runtime_hours = (dt_util.now() - stats["start_time"]).total_seconds() / 3600
         if runtime_hours > 1:  # Only calculate after 1 hour of operation
@@ -1279,50 +1604,127 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                 stability_factor = 100 - ((adjustments_per_hour - 4) * 10)
             else:
                 stability_factor = max(20, 100 - adjustments_per_hour * 5)
-            
+
             stats["control_stability"] = stability_factor
             score = score * 0.7 + stability_factor * 0.3
-        
+
         # Energy saving bonus (20% weight)
         if stats["night_saving_activations"] > 0 and runtime_hours > 24:
             # Bonus for using night saving features
             nights_possible = max(1, runtime_hours / 24)
-            night_saving_ratio = min(1.0, stats["night_saving_activations"] / nights_possible)
+            night_saving_ratio = min(
+                1.0, stats["night_saving_activations"] / nights_possible
+            )
             energy_bonus = night_saving_ratio * 20  # Up to 20 point bonus
             score = min(120, score + energy_bonus)  # Cap at 120%
-        
+
         stats["efficiency_score"] = round(score, 1)
-    
+
     def _get_performance_summary(self) -> dict:
         """Get human-readable performance summary."""
         stats = self._performance_stats
         now = dt_util.now()
         runtime_hours = (now - stats["start_time"]).total_seconds() / 3600
-        
+
         summary = {
             "runtime_hours": round(runtime_hours, 1),
             "efficiency_score": stats["efficiency_score"],
-            "temperature_accuracy": f"{stats['avg_temp_accuracy']:.1f}%" if stats["avg_temp_accuracy"] else "N/A",
+            "temperature_accuracy": f"{stats['avg_temp_accuracy']:.1f}%"
+            if stats["avg_temp_accuracy"]
+            else "N/A",
             "control_stability": f"{stats['control_stability']:.1f}%",
             "total_actions": stats["total_control_actions"],
             "valve_adjustments": stats["valve_adjustments"],
         }
-        
+
         if runtime_hours > 1:
-            summary["actions_per_hour"] = round(stats["total_control_actions"] / runtime_hours, 1)
-            summary["adjustments_per_hour"] = round(stats["valve_adjustments"] / runtime_hours, 1)
-        
+            summary["actions_per_hour"] = round(
+                stats["total_control_actions"] / runtime_hours, 1
+            )
+            summary["adjustments_per_hour"] = round(
+                stats["valve_adjustments"] / runtime_hours, 1
+            )
+
         if stats["temp_deviations"]:
             avg_dev = sum(stats["temp_deviations"]) / len(stats["temp_deviations"])
             summary["avg_temp_deviation"] = f"{avg_dev:.2f}°C"
             summary["max_temp_deviation"] = f"{stats['max_temp_deviation']:.2f}°C"
-        
+
         if stats["control_response_times"]:
-            avg_response = sum(stats["control_response_times"]) / len(stats["control_response_times"])
+            avg_response = sum(stats["control_response_times"]) / len(
+                stats["control_response_times"]
+            )
             summary["avg_response_time"] = f"{avg_response:.0f} min"
-        
+
         return summary
-    
+
+    def _validate_trv_state(self, trv_config: dict, trv_state: dict) -> dict:
+        """Validate that TRV actual state matches expected state."""
+        trv_id = trv_config[CONF_TRV]
+        trv_entity_state = self.hass.states.get(trv_id)
+
+        validation_result = {
+            "setpoint_valid": False,
+            "valve_position_valid": False,
+            "actual_setpoint": None,
+            "expected_setpoint": None,
+            "actual_valve_position": None,
+            "expected_valve_position": None,
+            "setpoint_deviation": None,
+            "valve_position_deviation": None,
+        }
+
+        if not trv_entity_state:
+            return validation_result
+
+        # Get actual TRV setpoint
+        actual_setpoint = trv_entity_state.attributes.get("temperature")
+        expected_setpoint = self._get_adjusted_target_temperature()
+
+        # Get actual TRV valve position (try multiple attribute names)
+        actual_valve_position = (
+            trv_entity_state.attributes.get("valve_position")
+            or trv_entity_state.attributes.get("position")
+            or trv_entity_state.attributes.get("valve_opening")
+        )
+        expected_valve_position = trv_state["valve_position"]
+
+        # Validate setpoint (allow 0.5°C tolerance)
+        if actual_setpoint is not None and expected_setpoint is not None:
+            validation_result["actual_setpoint"] = actual_setpoint
+            validation_result["expected_setpoint"] = expected_setpoint
+            setpoint_deviation = abs(actual_setpoint - expected_setpoint)
+            validation_result["setpoint_deviation"] = setpoint_deviation
+            validation_result["setpoint_valid"] = setpoint_deviation <= 0.5
+
+            if not validation_result["setpoint_valid"]:
+                _LOGGER.warning(
+                    "TRV %s setpoint mismatch: actual %.1f°C, expected %.1f°C (deviation: %.1f°C)",
+                    trv_id,
+                    actual_setpoint,
+                    expected_setpoint,
+                    setpoint_deviation,
+                )
+
+        # Validate valve position (allow 5% tolerance)
+        if actual_valve_position is not None and expected_valve_position is not None:
+            validation_result["actual_valve_position"] = actual_valve_position
+            validation_result["expected_valve_position"] = expected_valve_position
+            valve_deviation = abs(actual_valve_position - expected_valve_position)
+            validation_result["valve_position_deviation"] = valve_deviation
+            validation_result["valve_position_valid"] = valve_deviation <= 5
+
+            if not validation_result["valve_position_valid"]:
+                _LOGGER.warning(
+                    "TRV %s valve position mismatch: actual %d%%, expected %d%% (deviation: %d%%)",
+                    trv_id,
+                    actual_valve_position,
+                    expected_valve_position,
+                    valve_deviation,
+                )
+
+        return validation_result
+
     def _format_relative_time(self, timestamp) -> str:
         """Format timestamp as relative time in Danish."""
         if timestamp is None:
@@ -1392,7 +1794,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         """Get the target temperature adjusted for night saving."""
         old_night_saving_active = self._night_saving_active
         self._night_saving_active = self._is_night_saving_time()
-        
+
         # Track night saving activation changes
         if self._night_saving_active and not old_night_saving_active:
             self._update_performance_stats("night_saving_activation")

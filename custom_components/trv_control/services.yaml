@@ -18,6 +18,14 @@ set_valve_position:
       description: Valve position (0-100%)
       required: true
       selector:
+
+force_valve_control:
+  name: Force Valve Control
+  description: Force immediate valve control calculation and execution
+  target:
+    entity:
+      domain: climate
+      integration: trv_control
         number:
           min: 0
           max: 100
@@ -27,6 +35,15 @@ set_valve_position:
 reset_performance_stats:
   name: Reset Performance Statistics
   description: Reset performance monitoring statistics for TRV control
+  target:
+    entity:
+      domain: climate
+      integration: trv_control
+  fields: {}
+
+validate_trvs:
+  name: Validate TRVs
+  description: Validate that TRV setpoints and valve positions match expected values
   target:
     entity:
       domain: climate

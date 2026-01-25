@@ -38,11 +38,11 @@ DEFAULT_RETURN_TEMP_OPEN = 30.0  # Keep low for efficiency
 DEFAULT_MAX_VALVE_POSITION = 100
 DEFAULT_MIN_VALVE_POSITION = 0
 DEFAULT_MIN_VALVE_POSITION_DELTA = 5  # Default delta for max open % above min
-DEFAULT_ANTICIPATORY_OFFSET = 0.3  # Reduced from 0.5°C - less aggressive anticipation
+DEFAULT_ANTICIPATORY_OFFSET = 0.1  # Reduced from 0.3°C - much less aggressive anticipation
 
 # Proportional control settings
 DEFAULT_PROPORTIONAL_BAND = (
-    2.5  # Reduced from 3.0°C - tighter control for better stability
+    2.0  # Reduced from 2.5°C - even tighter control for better response
 )
 DEFAULT_MIN_VALVE_CHANGE = (
     15  # Increased from 5% - prevents excessive cycling (main fix)
@@ -68,3 +68,5 @@ DEFAULT_NIGHT_SCHEDULE = {
 SERVICE_SET_VALVE_POSITION = "set_valve_position"
 SERVICE_SET_TRV_THRESHOLDS = "set_trv_thresholds"
 SERVICE_RESET_PERFORMANCE_STATS = "reset_performance_stats"
+SERVICE_VALIDATE_TRVS = "validate_trvs"
+SERVICE_FORCE_VALVE_CONTROL = "force_valve_control"

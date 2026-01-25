@@ -60,22 +60,52 @@ class TRVControlCard extends HTMLElement {
     const nightSavingActive = attrs.night_saving_active || false;
     const adjustedTargetTemp = attrs.adjusted_target_temp;
 
-    // Get all TRV data
+    // Get all TRV data with validation
     const trvs = [];
     for (let key in attrs) {
       if (key.endsWith('_entity') && !key.startsWith('temp_sensor') && !key.startsWith('window_sensor')) {
         const trvPrefix = key.replace('_entity', '');
+        const trvEntityId = attrs[key];
+        const trvEntityState = hass.states[trvEntityId];
+        
+        // Get actual TRV state for validation
+        const actualSetpoint = trvEntityState ? trvEntityState.attributes.temperature : null;
+        const actualValvePosition = trvEntityState ? (
+          trvEntityState.attributes.valve_position || 
+          trvEntityState.attributes.position || 
+          trvEntityState.attributes.valve_opening
+        ) : null;
+        
+        // Get expected values from TRV control
+        const expectedSetpoint = nightSavingActive && adjustedTargetTemp ? adjustedTargetTemp : targetTemp;
+        const expectedValvePosition = attrs[`${trvPrefix}_valve_position`];
+        
+        // Validate setpoint (allow 0.5°C tolerance)
+        const setpointValid = actualSetpoint !== null && 
+          Math.abs(actualSetpoint - expectedSetpoint) <= 0.5;
+        
+        // Validate valve position (allow 5% tolerance)
+        const valvePositionValid = actualValvePosition !== null && expectedValvePosition !== null &&
+          Math.abs(actualValvePosition - expectedValvePosition) <= 5;
+        
         trvs.push({
           name: trvPrefix.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-          entity: attrs[key],
+          entity: trvEntityId,
           returnTemp: attrs[`${trvPrefix}_return_temp`],
           returnSensor: attrs[`${trvPrefix}_return_temp_sensor`],
-          valvePosition: attrs[`${trvPrefix}_valve_position`],
+          valvePosition: expectedValvePosition,
+          actualValvePosition: actualValvePosition,
+          valvePositionValid: valvePositionValid,
           valveActive: attrs[`${trvPrefix}_valve_control_active`],
           closeThreshold: attrs[`${trvPrefix}_close_threshold`],
           openThreshold: attrs[`${trvPrefix}_open_threshold`],
-          maxPosition: attrs[`${trvPrefix}_max_position`], anticipatoryOffset: attrs[`${trvPrefix}_anticipatory_offset`], status: attrs[`${trvPrefix}_status`],
-          statusReason: attrs[`${trvPrefix}_status_reason`]
+          maxPosition: attrs[`${trvPrefix}_max_position`], 
+          anticipatoryOffset: attrs[`${trvPrefix}_anticipatory_offset`], 
+          status: attrs[`${trvPrefix}_status`],
+          statusReason: attrs[`${trvPrefix}_status_reason`],
+          expectedSetpoint: expectedSetpoint,
+          actualSetpoint: actualSetpoint,
+          setpointValid: setpointValid
         });
       }
     }
@@ -388,6 +418,32 @@ class TRVControlCard extends HTMLElement {
           font-size: 15px;
           font-weight: 500;
         }
+        .validation-indicator {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          margin-left: 6px;
+        }
+        .validation-icon {
+          width: 14px;
+          height: 14px;
+        }
+        .validation-valid {
+          color: #4caf50;
+        }
+        .validation-invalid {
+          color: #f44336;
+        }
+        .validation-details {
+          font-size: 10px;
+          color: var(--secondary-text-color);
+          margin-top: 2px;
+          opacity: 0.8;
+        }
+        .validation-mismatch {
+          color: #ff9800;
+          font-weight: 500;
+        }
         .valve-bar {
           margin-top: 12px;
         }
@@ -622,24 +678,61 @@ class TRVControlCard extends HTMLElement {
               </div>
               <div class="stat">
                 <div class="stat-label">Valve Position</div>
-                <div class="stat-value">${trv.valvePosition !== undefined ? trv.valvePosition : 'N/A'}%</div>
+                <div class="stat-value">
+                  ${trv.valvePosition !== undefined ? trv.valvePosition : 'N/A'}%
+                  <span class="validation-indicator">
+                    <ha-icon 
+                      icon="mdi:${trv.valvePositionValid ? 'check-circle' : 'alert-circle'}" 
+                      class="validation-icon ${trv.valvePositionValid ? 'validation-valid' : 'validation-invalid'}"
+                    ></ha-icon>
+                  </span>
+                </div>
+                ${trv.actualValvePosition !== null ? `
+                <div class="validation-details">
+                  TRV: ${trv.actualValvePosition}% ${!trv.valvePositionValid ? `<span class="validation-mismatch">(Expected: ${trv.valvePosition}%)</span>` : ''}
+                </div>
+                ` : ''}
+              </div>
+              <div class="stat">
+                <div class="stat-label">Target Temp</div>
+                <div class="stat-value">
+                  ${trv.expectedSetpoint ? trv.expectedSetpoint.toFixed(1) : 'N/A'}°C
+                  <span class="validation-indicator">
+                    <ha-icon 
+                      icon="mdi:${trv.setpointValid ? 'check-circle' : 'alert-circle'}" 
+                      class="validation-icon ${trv.setpointValid ? 'validation-valid' : 'validation-invalid'}"
+                    ></ha-icon>
+                  </span>
+                </div>
+                ${trv.actualSetpoint !== null ? `
+                <div class="validation-details">
+                  TRV: ${trv.actualSetpoint.toFixed(1)}°C ${!trv.setpointValid ? `<span class="validation-mismatch">(Expected: ${trv.expectedSetpoint.toFixed(1)}°C)</span>` : ''}
+                </div>
+                ` : ''}
               </div>
               <div class="stat">
                 <div class="stat-label">Status</div>
                 <div class="stat-value" style="font-size: 12px; color: ${trv.status === 'healthy' ? '#4caf50' : trv.status === 'control_disabled' ? '#9e9e9e' : '#ff9800'}">${trv.status || 'Unknown'}</div>
               </div>
-              <div class="stat">
-                <div class="stat-label">Threshold</div>
-                <div class="stat-value">${trv.closeThreshold !== undefined ? trv.closeThreshold.toFixed(1) : 'N/A'}°C</div>
-              </div>
             </div>
 
             <div class="valve-bar">
               <div class="valve-bar-bg">
-                <div class="valve-bar-fill" style="width: ${trv.valvePosition || 0}%"></div>
+                <div class="valve-bar-fill" style="width: ${trv.actualValvePosition || trv.valvePosition || 0}%"></div>
+                ${trv.actualValvePosition !== trv.valvePosition && trv.actualValvePosition !== null && trv.valvePosition !== null ? `
+                <div class="valve-bar-expected" style="
+                  position: absolute; 
+                  top: 0; 
+                  left: ${trv.valvePosition}%; 
+                  width: 2px; 
+                  height: 100%; 
+                  background: #ff9800; 
+                  opacity: 0.8;
+                "></div>
+                ` : ''}
               </div>
               <div class="valve-label">
-                <span>Valve: ${trv.valvePosition || 0}%</span>
+                <span>Valve: ${trv.actualValvePosition !== null ? trv.actualValvePosition : trv.valvePosition || 0}%${trv.actualValvePosition !== trv.valvePosition && trv.actualValvePosition !== null && trv.valvePosition !== null ? ` (Expected: ${trv.valvePosition}%)` : ''}</span>
                 <span>Max: ${trv.maxPosition || 100}%</span>
               </div>
             </div>
