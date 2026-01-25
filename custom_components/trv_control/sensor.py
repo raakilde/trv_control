@@ -16,7 +16,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 
-from .const import DOMAIN
+from .const import CONF_TRV, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,8 +44,8 @@ async def async_setup_entry(
         await asyncio.sleep(0.5)
 
     if not climate_entities:
-        _LOGGER.error(
-            "Could not find climate entities for config entry %s after waiting",
+        _LOGGER.info(
+            "No climate entities found for config entry %s - this is normal if no rooms are configured",
             config_entry.entry_id,
         )
         return
@@ -76,7 +76,30 @@ async def async_setup_entry(
 
         # Add sensors for each TRV
         for idx, trv in enumerate(climate_entity._trvs):
-            trv_name = trv.get("name", f"TRV {idx + 1}")
+            # Get the TRV entity name directly
+            trv_entity_id = trv.get(CONF_TRV, "")
+            trv_name = f"TRV {idx + 1}"  # Default fallback
+
+            if trv_entity_id:
+                # Try to get the actual entity name from Home Assistant
+                state = hass.states.get(trv_entity_id)
+                if state and hasattr(state, "attributes"):
+                    # Use the friendly name directly
+                    friendly_name = state.attributes.get("friendly_name", "")
+                    if friendly_name:
+                        trv_name = friendly_name
+                    else:
+                        # Fallback to entity name part
+                        trv_name = (
+                            trv_entity_id.replace("climate.", "")
+                            .replace("_", " ")
+                            .title()
+                        )
+                else:
+                    # Entity not found, use entity ID as name
+                    trv_name = (
+                        trv_entity_id.replace("climate.", "").replace("_", " ").title()
+                    )
 
             sensors.extend(
                 [
@@ -100,7 +123,31 @@ async def async_setup_entry(
 
         # Add per-TRV diagnostic sensors
         for idx, trv in enumerate(climate_entity._trvs):
-            trv_name = trv.get("name", f"TRV {idx + 1}")
+            # Get the TRV entity name directly (same logic as above)
+            trv_entity_id = trv.get(CONF_TRV, "")
+            trv_name = f"TRV {idx + 1}"  # Default fallback
+
+            if trv_entity_id:
+                # Try to get the actual entity name from Home Assistant
+                state = hass.states.get(trv_entity_id)
+                if state and hasattr(state, "attributes"):
+                    # Use the friendly name directly
+                    friendly_name = state.attributes.get("friendly_name", "")
+                    if friendly_name:
+                        trv_name = friendly_name
+                    else:
+                        # Fallback to entity name part
+                        trv_name = (
+                            trv_entity_id.replace("climate.", "")
+                            .replace("_", " ")
+                            .title()
+                        )
+                else:
+                    # Entity not found, use entity ID as name
+                    trv_name = (
+                        trv_entity_id.replace("climate.", "").replace("_", " ").title()
+                    )
+
             sensors.append(TRVHealthSensor(climate_entity, trv, base_name, trv_name))
 
         _LOGGER.info("Adding %d sensors for %s", len(sensors), climate_entity.name)

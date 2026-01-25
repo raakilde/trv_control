@@ -2,130 +2,114 @@
   "config": {
     "step": {
       "user": {
-        "title": "Opsætning af TRV Control",
-        "description": "Dette opretter TRV Control integrationen. Du kan tilføje rum efter opsætning."
+        "title": "Opsæt TRV Rum Kontrol",
+        "description": "Opret intelligent TRV kontrol for ét rum med ekstern temperatursensor og returtemperatur overvågning.",
+        "data": {
+          "room_name": "Rum navn",
+          "temp_sensor": "Rum temperatursensor",
+          "window_sensor": "Vindue/Dørsensor (valgfri)"
+        },
+        "data_description": {
+          "room_name": "Navn på rummet (f.eks. 'Stue', 'Soveværelse')",
+          "temp_sensor": "Ekstern temperatursensor for præcis rumtemperatur",
+          "window_sensor": "Binær sensor der stopper opvarmning når vindue/dør er åben"
+        }
+      },
+      "trv_setup": {
+        "title": "Tilføj TRV til {room_name}{trv_text}",
+        "description": "Konfigurer TRV #{trv_count} og dens returtemperatursensor for intelligent varmekontrol. Du kan tilføje flere TRVs for at dække hele rummet.",
+        "data": {
+          "trv": "TRV Klima Enhed",
+          "return_temp": "Returtemperatursensor",
+          "return_temp_close": "Luk ventil temperatur (°C)",
+          "max_valve_position": "Maksimal ventilåbning (%)",
+          "proportional_band": "Kontrol præcision (°C)",
+          "pid_anticipatory_offset": "Tidlig stop offset (°C)",
+          "add_another": "Tilføj endnu en TRV til dette rum"
+        },
+        "data_description": {
+          "trv": "TRV klima entiteten der skal styres",
+          "return_temp": "Temperatursensor på radiator returledning",
+          "return_temp_close": "Temperatur der stopper opvarmning (forhindrer overophedning)",
+          "max_valve_position": "Maksimalt tilladte ventilåbning (0-100%)",
+          "proportional_band": "Mindre værdier = mere præcis kontrol (1.5-4.0°C)",
+          "pid_anticipatory_offset": "Hvor tidligt varmen reduceres før måltemperatur (0.2-0.5°C)",
+          "add_another": "Afkryds for at tilføje flere TRVs til dette rum (nyttigt for store rum med flere radiatorer)"
+        }
       }
     },
+    "error": {
+      "room_exists": "En TRV Control integration eksisterer allerede for dette rum navn",
+      "no_trvs": "Mindst én TRV skal konfigureres for hvert rum"
+    },
     "abort": {
-      "single_instance_allowed": "TRV Control er allerede konfigureret. For at tilføje rum, gå til Indstillinger → Enheder & Tjenester, find TRV Control, og klik på Konfigurer.",
-      "no_rooms": "Ingen rum konfigureret endnu.",
-      "rooms_listed": "Konfigurerede rum:\n{rooms}"
+      "single_instance_allowed": "Hvert rum har brug for sin egen TRV Control integration. Opret en ny integration for hvert rum.",
+      "setup_complete": "TRV Control opsætning færdig for {room_name}!"
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "TRV Control Indstillinger",
-        "description": "Administrer rum og konfiguration",
-        "menu_options": {
-          "add_room": "Tilføj rum",
-          "manage_room": "Administrer rum TRVs",
-          "remove_room": "Fjern rum",
-          "list_rooms": "Vis rum"
-        }
-      },
-      "add_room": {
-        "title": "Tilføj rum",
-        "description": "Opret et nyt rum. Du kan tilføje TRVs til det bagefter.",
-        "data": {
-          "room_name": "Rum navn",
-          "temp_sensor": "Temperatursensor (Z2M)",
-          "window_sensor": "Vinduesensor (valgfri)"
-        },
-        "data_description": {
-          "temp_sensor": "Delt temperatursensor for alle TRVs i dette rum",
-          "window_sensor": "Binær sensor der detekterer åbent vindue (varme stoppes ved åbning)"
-        }
-      },
-      "manage_room": {
-        "title": "Vælg rum at administrere",
-        "description": "Vælg hvilket rums TRVs der skal administreres",
-        "data": {
-          "room": "Rum"
-        }
-      },
-      "room_options": {
-        "title": "Administrer rum TRVs",
-        "description": "Tilføj, rediger eller fjern TRVs for {room_name}",
+        "title": "Administrer {room_name} TRVs",
+        "description": "Tilføj, rediger eller fjern TRVs for dette rum.",
         "menu_options": {
           "add_trv": "Tilføj TRV",
-          "edit_trv": "Rediger TRV indstillinger",
+          "edit_trv": "Rediger TRV Indstillinger",
           "remove_trv": "Fjern TRV",
           "list_trvs": "Vis TRVs"
         }
       },
       "add_trv": {
         "title": "Tilføj TRV til {room_name}",
-        "description": "Hver TRV har sin egen returtemperatursensor",
+        "description": "Konfigurer en ny TRV med dens returtemperatursensor.",
         "data": {
-          "trv": "TRV enhed (Z2M)",
-          "return_temp": "Returtemperatursensor (Z2M)",
-          "return_temp_close": "Returtemp for lukning af ventil (°C)",
-          "return_temp_open": "Returtemp for åbning af ventil (°C)",
-          "min_valve_position": "Minimal ventilposition (%)",
-          "max_valve_position": "Maksimal ventilposition (%)",
-          "anticipatory_offset": "Foregribende offset (°C)",
-          "proportional_band": "Proportionalt bånd (°C)",
-          "pid_anticipatory_offset": "PID foregribende offset (°C)"
+          "trv": "TRV Klima Enhed",
+          "return_temp": "Returtemperatursensor",
+          "return_temp_close": "Luk ventil temperatur (°C)",
+          "max_valve_position": "Maksimal ventilåbning (%)",
+          "proportional_band": "Kontrol præcision (°C)",
+          "pid_anticipatory_offset": "Tidlig stop offset (°C)"
         },
         "data_description": {
-          "return_temp": "Temperatursensor på denne TRVs radiator returledning",
-          "return_temp_close": "Når returtemperaturen når dette, lukkes ventilen",
-          "return_temp_open": "Når returtemperaturen falder til dette, åbnes ventilen",
-          "min_valve_position": "Minimal ventilåbning i procent (0-100%)",
-          "max_valve_position": "Maksimal ventilåbning i procent (0-100%)",
-          "anticipatory_offset": "Temperatur offset til foregribelse af varmebehov",
-          "proportional_band": "Temperaturområde for proportional kontrol",
-          "pid_anticipatory_offset": "PID kontroller foregribende offset"
+          "trv": "TRV klima entiteten der skal styres",
+          "return_temp": "Temperatursensor på radiator returledning",
+          "return_temp_close": "Temperatur der stopper opvarmning (forhindrer overophedning)",
+          "max_valve_position": "Maksimalt tilladte ventilåbning (0-100%)",
+          "proportional_band": "Mindre værdier = mere præcis kontrol (1.5-4.0°C)",
+          "pid_anticipatory_offset": "Hvor tidligt varmen reduceres før måltemperatur (0.2-0.5°C)"
         }
       },
       "edit_trv": {
-        "title": "Rediger TRV indstillinger for {room_name}",
-        "description": "Modificer returtemperatur grænser og ventilposition",
+        "title": "Rediger TRV Indstillinger for {room_name}",
+        "description": "Modificer TRV konfigurationsindstillinger.",
         "data": {
           "trv": "TRV der skal redigeres",
-          "return_temp_close": "Returtemp for lukning af ventil (°C)",
-          "return_temp_open": "Returtemp for åbning af ventil (°C)",
-          "min_valve_position": "Minimal ventilposition (%)",
-          "max_valve_position": "Maksimal ventilposition (%)",
-          "anticipatory_offset": "Foregribende offset (°C)",
-          "proportional_band": "Proportionalt bånd (°C)",
-          "pid_anticipatory_offset": "PID foregribende offset (°C)"
+          "return_temp_close": "Luk ventil temperatur (°C)",
+          "max_valve_position": "Maksimal ventilåbning (%)",
+          "proportional_band": "Kontrol præcision (°C)",
+          "pid_anticipatory_offset": "Tidlig stop offset (°C)"
         },
         "data_description": {
-          "return_temp_close": "Når returtemperaturen når dette, lukkes ventilen",
-          "return_temp_open": "Når returtemperaturen falder til dette, åbnes ventilen",
-          "min_valve_position": "Minimal ventilåbning i procent (0-100%)",
-          "max_valve_position": "Maksimal ventilåbning i procent (0-100%)",
-          "anticipatory_offset": "Temperatur offset til foregribelse af varmebehov",
-          "proportional_band": "Temperaturområde for proportional kontrol",
-          "pid_anticipatory_offset": "PID kontroller foregribende offset"
+          "return_temp_close": "Temperatur der stopper opvarmning (forhindrer overophedning)",
+          "max_valve_position": "Maksimalt tilladte ventilåbning (0-100%)",
+          "proportional_band": "Mindre værdier = mere præcis kontrol (1.5-4.0°C)",
+          "pid_anticipatory_offset": "Hvor tidligt varmen reduceres før måltemperatur (0.2-0.5°C)"
         }
       },
       "remove_trv": {
         "title": "Fjern TRV fra {room_name}",
-        "description": "Vælg en TRV der skal fjernes",
+        "description": "Vælg en TRV der skal fjernes fra dette rum.",
         "data": {
           "trv": "TRV der skal fjernes"
-        }
-      },
-      "remove_room": {
-        "title": "Fjern rum",
-        "description": "Vælg et rum der skal fjernes",
-        "data": {
-          "room": "Rum der skal fjernes"
         }
       }
     },
     "error": {
-      "room_exists": "Et rum med dette navn eksisterer allerede",
       "unknown": "Uventet fejl"
     },
     "abort": {
-      "no_rooms": "Ingen rum konfigureret endnu. Tilføj et rum først.",
-      "no_trvs": "Ingen TRVs i dette rum endnu. Tilføj en TRV først.",
-      "trvs_listed": "TRVs i {room_name}:\n{trvs}",
-      "rooms_listed": "Konfigurerede rum:\n{rooms}"
+      "no_trvs": "Ingen TRVs konfigureret i dette rum endnu. Tilføj en TRV først.",
+      "trvs_listed": "TRVs i {room_name}:\n{trvs}"
     }
   }
 }

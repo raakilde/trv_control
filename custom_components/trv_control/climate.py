@@ -54,30 +54,58 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the climate platform."""
-    # Get rooms from options if available, otherwise from data
-    # Check explicitly for None to allow empty list
-    if CONF_ROOMS in config_entry.options:
-        rooms = config_entry.options[CONF_ROOMS]
+    # New approach: Single room per integration
+    if CONF_TRVS in config_entry.data:
+        # New format: direct room data
+        room_data = {
+            CONF_ROOM_NAME: config_entry.data.get(CONF_ROOM_NAME),
+            CONF_TEMP_SENSOR: config_entry.data.get(CONF_TEMP_SENSOR),
+            CONF_WINDOW_SENSOR: config_entry.data.get(CONF_WINDOW_SENSOR),
+            CONF_TRVS: config_entry.data[CONF_TRVS],
+        }
+        entity = TRVClimate(config_entry, room_data)
+        async_add_entities([entity])
+        
+        # Store entity in hass.data
+        from .const import DOMAIN
+        hass.data[DOMAIN][config_entry.entry_id] = [entity]
+        _LOGGER.info(
+            "Climate entity created for room %s with %d TRVs",
+            room_data[CONF_ROOM_NAME],
+            len(room_data[CONF_TRVS]),
+        )
     else:
-        rooms = config_entry.data.get(CONF_ROOMS, [])
+        # Legacy format: multiple rooms (backward compatibility)
+        if CONF_ROOMS in config_entry.options:
+            rooms = config_entry.options[CONF_ROOMS]
+        else:
+            rooms = config_entry.data.get(CONF_ROOMS, [])
 
-    entities = []
-    for room in rooms:
-        entity = TRVClimate(config_entry, room)
-        entities.append(entity)
+        entities = []
+        for room in rooms:
+            entity = TRVClimate(config_entry, room)
+            entities.append(entity)
 
-    async_add_entities(entities)
+        async_add_entities(entities)
 
-    # Store all entities in hass.data for sensor access
-    if entities:
+        # Store all entities in hass.data for sensor access
         from .const import DOMAIN
 
-        hass.data[DOMAIN][config_entry.entry_id] = entities
-        _LOGGER.info(
-            "Climate entities stored in hass.data for entry %s: %d entities",
-            config_entry.entry_id,
-            len(entities),
-        )
+        if entities:
+            hass.data[DOMAIN][config_entry.entry_id] = entities
+            _LOGGER.info(
+                "Climate entities stored in hass.data for entry %s: %d entities",
+                config_entry.entry_id,
+                len(entities),
+            )
+        else:
+            # No entities - clean up hass.data to avoid sensor errors
+            if config_entry.entry_id in hass.data.get(DOMAIN, {}):
+                del hass.data[DOMAIN][config_entry.entry_id]
+            _LOGGER.info(
+                "No rooms configured for entry %s - cleaned up hass.data",
+                config_entry.entry_id,
+            )
 
 
 class TRVClimate(ClimateEntity, RestoreEntity):

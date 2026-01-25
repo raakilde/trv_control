@@ -2,51 +2,56 @@
   "config": {
     "step": {
       "user": {
-        "title": "Set up TRV Control",
-        "description": "This will create the TRV Control integration. You can add rooms after setup."
+        "title": "Setup TRV Room Control",
+        "description": "Create intelligent TRV control for one room with external temperature sensor and return temperature monitoring.",
+        "data": {
+          "room_name": "Room Name",
+          "temp_sensor": "Room Temperature Sensor",
+          "window_sensor": "Window/Door Sensor (Optional)"
+        },
+        "data_description": {
+          "room_name": "Name of the room (e.g. 'Living Room', 'Bedroom')",
+          "temp_sensor": "External temperature sensor for accurate room temperature",
+          "window_sensor": "Binary sensor that stops heating when window/door is open"
+        }
+      },
+      "trv_setup": {
+        "title": "Add TRV to {room_name}{trv_text}",
+        "description": "Configure TRV #{trv_count} and its return temperature sensor for intelligent heating control. You can add multiple TRVs to cover the entire room.",
+        "data": {
+          "trv": "TRV Climate Device",
+          "return_temp": "Return Temperature Sensor",
+          "return_temp_close": "Close Valve Temperature (°C)",
+          "max_valve_position": "Maximum Valve Opening (%)",
+          "proportional_band": "Control Precision (°C)",
+          "pid_anticipatory_offset": "Early Stop Offset (°C)",
+          "add_another": "Add Another TRV to This Room"
+        },
+        "data_description": {
+          "trv": "The TRV climate entity to control",
+          "return_temp": "Temperature sensor on radiator return pipe",
+          "return_temp_close": "Temperature that stops heating (prevents overheating)",
+          "max_valve_position": "Maximum allowed valve opening (0-100%)",
+          "proportional_band": "Smaller values = more precise control (1.5-4.0°C)",
+          "pid_anticipatory_offset": "How early to reduce heating before target (0.2-0.5°C)",
+          "add_another": "Check this to add more TRVs to this room (useful for large rooms with multiple radiators)"
+        }
       }
     },
+    "error": {
+      "room_exists": "A TRV Control integration already exists for this room name",
+      "no_trvs": "At least one TRV must be configured for each room"
+    },
     "abort": {
-      "single_instance_allowed": "TRV Control is already configured. To add rooms, go to Settings → Devices & Services, find TRV Control, and click Configure.",
-      "no_rooms": "No rooms configured yet.",
-      "rooms_listed": "Configured rooms:\n{rooms}"
+      "single_instance_allowed": "Each room needs its own TRV Control integration. Create a new integration for each room.",
+      "setup_complete": "TRV Control setup complete for {room_name}!"
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "TRV Control Options",
-        "description": "Manage rooms and configuration",
-        "menu_options": {
-          "add_room": "Add Room",
-          "manage_room": "Manage Room TRVs",
-          "remove_room": "Remove Room",
-          "list_rooms": "List Rooms"
-        }
-      },
-      "add_room": {
-        "title": "Add Room",
-        "description": "Create a new room. You can add TRVs to it afterwards.",
-        "data": {
-          "room_name": "Room Name",
-          "temp_sensor": "Temperature Sensor (Z2M)",
-          "window_sensor": "Window Sensor (Optional)"
-        },
-        "data_description": {
-          "temp_sensor": "Shared temperature sensor for all TRVs in this room",
-          "window_sensor": "Binary sensor that detects open window (heating stops when open)"
-        }
-      },
-      "manage_room": {
-        "title": "Select Room to Manage",
-        "description": "Choose which room's TRVs to manage",
-        "data": {
-          "room": "Room"
-        }
-      },
-      "room_options": {
-        "title": "Manage Room TRVs",
-        "description": "Add, edit or remove TRVs for {room_name}",
+        "title": "Manage {room_name} TRVs",
+        "description": "Add, edit or remove TRVs for this room.",
         "menu_options": {
           "add_trv": "Add TRV",
           "edit_trv": "Edit TRV Settings",
@@ -56,68 +61,55 @@
       },
       "add_trv": {
         "title": "Add TRV to {room_name}",
-        "description": "Each TRV has its own return temperature sensor",
+        "description": "Configure a new TRV with its return temperature sensor.",
         "data": {
-          "trv": "TRV Device (Z2M)",
-          "return_temp": "Return Temperature Sensor (Z2M)",
-          "return_temp_close": "Return Temp Close Valve (°C)",
-          "max_valve_position": "Maximum Valve Position (%)",
-          "anticipatory_offset": "Anticipatory Offset (°C)",
-          "proportional_band": "Proportional Band (°C)",
-          "pid_anticipatory_offset": "PID Anticipatory Offset (°C)"
+          "trv": "TRV Climate Device",
+          "return_temp": "Return Temperature Sensor",
+          "return_temp_close": "Close Valve Temperature (°C)",
+          "max_valve_position": "Maximum Valve Opening (%)",
+          "proportional_band": "Control Precision (°C)",
+          "pid_anticipatory_offset": "Early Stop Offset (°C)"
         },
         "data_description": {
-          "return_temp": "Temperature sensor on this TRV's radiator return pipe",
-          "return_temp_close": "When return temperature reaches this, valve closes",
-          "max_valve_position": "Maximum valve opening percentage (0-100%)",
-          "anticipatory_offset": "Temperature offset for anticipating heating needs",
-          "proportional_band": "Temperature range for proportional control",
-          "pid_anticipatory_offset": "PID controller anticipation offset"
+          "trv": "The TRV climate entity to control",
+          "return_temp": "Temperature sensor on radiator return pipe",
+          "return_temp_close": "Temperature that stops heating (prevents overheating)",
+          "max_valve_position": "Maximum allowed valve opening (0-100%)",
+          "proportional_band": "Smaller values = more precise control (1.5-4.0°C)",
+          "pid_anticipatory_offset": "How early to reduce heating before target (0.2-0.5°C)"
         }
       },
       "edit_trv": {
         "title": "Edit TRV Settings for {room_name}",
-        "description": "Modify return temperature thresholds and valve position",
+        "description": "Modify TRV configuration settings.",
         "data": {
-          "trv": "TRV to edit",
-          "return_temp_close": "Return Temp Close Valve (°C)",
-          "max_valve_position": "Maximum Valve Position (%)",
-          "anticipatory_offset": "Anticipatory Offset (°C)",
-          "proportional_band": "Proportional Band (°C)",
-          "pid_anticipatory_offset": "PID Anticipatory Offset (°C)"
+          "trv": "TRV to Edit",
+          "return_temp_close": "Close Valve Temperature (°C)",
+          "max_valve_position": "Maximum Valve Opening (%)",
+          "proportional_band": "Control Precision (°C)",
+          "pid_anticipatory_offset": "Early Stop Offset (°C)"
         },
         "data_description": {
-          "return_temp_close": "When return temperature reaches this, valve closes",
-          "max_valve_position": "Maximum valve opening percentage (0-100%)",
-          "anticipatory_offset": "Temperature offset for anticipating heating needs",
-          "proportional_band": "Temperature range for proportional control",
-          "pid_anticipatory_offset": "PID controller anticipation offset"
+          "return_temp_close": "Temperature that stops heating (prevents overheating)",
+          "max_valve_position": "Maximum allowed valve opening (0-100%)",
+          "proportional_band": "Smaller values = more precise control (1.5-4.0°C)",
+          "pid_anticipatory_offset": "How early to reduce heating before target (0.2-0.5°C)"
         }
       },
       "remove_trv": {
         "title": "Remove TRV from {room_name}",
-        "description": "Select a TRV to remove",
+        "description": "Select a TRV to remove from this room.",
         "data": {
-          "trv": "TRV to remove"
-        }
-      },
-      "remove_room": {
-        "title": "Remove Room",
-        "description": "Select a room to remove",
-        "data": {
-          "room": "Room to remove"
+          "trv": "TRV to Remove"
         }
       }
     },
     "error": {
-      "room_exists": "A room with this name already exists",
       "unknown": "Unexpected error"
     },
     "abort": {
-      "no_rooms": "No rooms configured yet. Add a room first.",
-      "no_trvs": "No TRVs in this room yet. Add a TRV first.",
-      "trvs_listed": "TRVs in {room_name}:\n{trvs}",
-      "rooms_listed": "Configured rooms:\n{rooms}"
+      "no_trvs": "No TRVs configured in this room yet. Add a TRV first.",
+      "trvs_listed": "TRVs in {room_name}:\n{trvs}"
     }
   }
 }
