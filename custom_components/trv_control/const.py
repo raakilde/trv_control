@@ -22,6 +22,13 @@ CONF_ANTICIPATORY_OFFSET = "anticipatory_offset"
 CONF_PROPORTIONAL_BAND = "proportional_band"
 CONF_PID_ANTICIPATORY_OFFSET = "pid_anticipatory_offset"
 
+# Night saving constants
+CONF_NIGHT_SAVING_ENABLED = "night_saving_enabled"
+CONF_NIGHT_SCHEDULE = "night_schedule"
+CONF_NIGHT_START_TIME = "night_start_time"  # Keep for backward compatibility
+CONF_NIGHT_END_TIME = "night_end_time"      # Keep for backward compatibility
+CONF_NIGHT_TEMP_REDUCTION = "night_temp_reduction"
+
 # Defaults
 DEFAULT_NAME = "TRV Control"
 DEFAULT_RETURN_TEMP_CLOSE = (
@@ -41,6 +48,21 @@ DEFAULT_MIN_VALVE_CHANGE = (
     15  # Increased from 5% - prevents excessive cycling (main fix)
 )
 DEFAULT_TEMP_HISTORY_SIZE = 30  # Increased from 20 - better heating rate calculation
+
+# Night saving defaults
+DEFAULT_NIGHT_SAVING_ENABLED = False
+DEFAULT_NIGHT_START_TIME = "00:00"
+DEFAULT_NIGHT_END_TIME = "06:00"
+DEFAULT_NIGHT_TEMP_REDUCTION = -2.0
+DEFAULT_NIGHT_SCHEDULE = {
+    "monday": {"enabled": False, "start_time": "00:00", "end_time": "06:00", "temp_reduction": -2.0},
+    "tuesday": {"enabled": False, "start_time": "00:00", "end_time": "06:00", "temp_reduction": -2.0},
+    "wednesday": {"enabled": False, "start_time": "00:00", "end_time": "06:00", "temp_reduction": -2.0},
+    "thursday": {"enabled": False, "start_time": "00:00", "end_time": "06:00", "temp_reduction": -2.0},
+    "friday": {"enabled": False, "start_time": "00:00", "end_time": "06:00", "temp_reduction": -2.0},
+    "saturday": {"enabled": False, "start_time": "00:00", "end_time": "06:00", "temp_reduction": -2.0},
+    "sunday": {"enabled": False, "start_time": "00:00", "end_time": "06:00", "temp_reduction": -2.0},
+}
 
 # Services
 SERVICE_SET_VALVE_POSITION = "set_valve_position"

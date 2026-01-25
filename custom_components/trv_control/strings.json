@@ -25,6 +25,8 @@
           "max_valve_position": "Maximum Valve Opening (%)",
           "proportional_band": "Control Precision (°C)",
           "pid_anticipatory_offset": "Early Stop Offset (°C)",
+          "night_saving_enabled": "Enable Night Saving",
+          "configure_schedule": "Configure Weekly Schedule",
           "add_another": "Add Another TRV to This Room"
         },
         "data_description": {
@@ -34,8 +36,48 @@
           "max_valve_position": "Maximum allowed valve opening (0-100%)",
           "proportional_band": "Smaller values = more precise control (1.5-4.0°C)",
           "pid_anticipatory_offset": "How early to reduce heating before target (0.2-0.5°C)",
+          "night_saving_enabled": "Automatically reduce temperature during night hours to save energy",
+          "configure_schedule": "Set up different night saving schedules for each day of the week",
           "add_another": "Check this to add more TRVs to this room (useful for large rooms with multiple radiators)"
         }
+      },
+      "weekly_schedule": {
+        "title": "Configure Weekly Night Saving Schedule for {room_name}",
+        "description": "Set up different night saving schedules for each day of the week. Enable only the days you want night saving.",
+        "data": {
+          "monday_enabled": "Monday - Enable",
+          "monday_start_time": "Monday - Start Time",
+          "monday_end_time": "Monday - End Time", 
+          "monday_temp_reduction": "Monday - Temperature Reduction (°C)",
+          "tuesday_enabled": "Tuesday - Enable",
+          "tuesday_start_time": "Tuesday - Start Time",
+          "tuesday_end_time": "Tuesday - End Time",
+          "tuesday_temp_reduction": "Tuesday - Temperature Reduction (°C)",
+          "wednesday_enabled": "Wednesday - Enable",
+          "wednesday_start_time": "Wednesday - Start Time",
+          "wednesday_end_time": "Wednesday - End Time",
+          "wednesday_temp_reduction": "Wednesday - Temperature Reduction (°C)",
+          "thursday_enabled": "Thursday - Enable",
+          "thursday_start_time": "Thursday - Start Time",
+          "thursday_end_time": "Thursday - End Time",
+          "thursday_temp_reduction": "Thursday - Temperature Reduction (°C)",
+          "friday_enabled": "Friday - Enable",
+          "friday_start_time": "Friday - Start Time",
+          "friday_end_time": "Friday - End Time",
+          "friday_temp_reduction": "Friday - Temperature Reduction (°C)",
+          "saturday_enabled": "Saturday - Enable",
+          "saturday_start_time": "Saturday - Start Time",
+          "saturday_end_time": "Saturday - End Time",
+          "saturday_temp_reduction": "Saturday - Temperature Reduction (°C)",
+          "sunday_enabled": "Sunday - Enable",
+          "sunday_start_time": "Sunday - Start Time",
+          "sunday_end_time": "Sunday - End Time",
+          "sunday_temp_reduction": "Sunday - Temperature Reduction (°C)"
+        }
+      },
+      "edit_weekly_schedule": {
+        "title": "Edit Weekly Night Saving Schedule for {room_name}",
+        "description": "Modify the night saving schedule for the selected TRV. Enable only the days you want night saving."
       }
     },
     "error": {
@@ -68,7 +110,8 @@
           "return_temp_close": "Close Valve Temperature (°C)",
           "max_valve_position": "Maximum Valve Opening (%)",
           "proportional_band": "Control Precision (°C)",
-          "pid_anticipatory_offset": "Early Stop Offset (°C)"
+          "pid_anticipatory_offset": "Early Stop Offset (°C)",
+          "night_saving_enabled": "Enable Night Saving"
         },
         "data_description": {
           "trv": "The TRV climate entity to control",
@@ -76,7 +119,8 @@
           "return_temp_close": "Temperature that stops heating (prevents overheating)",
           "max_valve_position": "Maximum allowed valve opening (0-100%)",
           "proportional_band": "Smaller values = more precise control (1.5-4.0°C)",
-          "pid_anticipatory_offset": "How early to reduce heating before target (0.2-0.5°C)"
+          "pid_anticipatory_offset": "How early to reduce heating before target (0.2-0.5°C)",
+          "night_saving_enabled": "Automatically reduce temperature during night hours to save energy"
         }
       },
       "edit_trv": {
@@ -87,13 +131,17 @@
           "return_temp_close": "Close Valve Temperature (°C)",
           "max_valve_position": "Maximum Valve Opening (%)",
           "proportional_band": "Control Precision (°C)",
-          "pid_anticipatory_offset": "Early Stop Offset (°C)"
+          "pid_anticipatory_offset": "Early Stop Offset (°C)",
+          "night_saving_enabled": "Enable Night Saving",
+          "configure_schedule": "Configure Weekly Schedule"
         },
         "data_description": {
           "return_temp_close": "Temperature that stops heating (prevents overheating)",
           "max_valve_position": "Maximum allowed valve opening (0-100%)",
           "proportional_band": "Smaller values = more precise control (1.5-4.0°C)",
-          "pid_anticipatory_offset": "How early to reduce heating before target (0.2-0.5°C)"
+          "pid_anticipatory_offset": "How early to reduce heating before target (0.2-0.5°C)",
+          "night_saving_enabled": "Automatically reduce temperature during night hours to save energy",
+          "configure_schedule": "Set up different night saving schedules for each day of the week"
         }
       },
       "remove_trv": {

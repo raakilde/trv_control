@@ -15,6 +15,11 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_ANTICIPATORY_OFFSET,
     CONF_MAX_VALVE_POSITION,
+    CONF_NIGHT_END_TIME,
+    CONF_NIGHT_SAVING_ENABLED,
+    CONF_NIGHT_SCHEDULE,
+    CONF_NIGHT_START_TIME,
+    CONF_NIGHT_TEMP_REDUCTION,
     CONF_PID_ANTICIPATORY_OFFSET,
     CONF_PROPORTIONAL_BAND,
     CONF_RETURN_TEMP,
@@ -26,6 +31,11 @@ from .const import (
     CONF_WINDOW_SENSOR,
     DEFAULT_ANTICIPATORY_OFFSET,
     DEFAULT_MAX_VALVE_POSITION,
+    DEFAULT_NIGHT_END_TIME,
+    DEFAULT_NIGHT_SAVING_ENABLED,
+    DEFAULT_NIGHT_SCHEDULE,
+    DEFAULT_NIGHT_START_TIME,
+    DEFAULT_NIGHT_TEMP_REDUCTION,
     DEFAULT_PROPORTIONAL_BAND,
     DEFAULT_RETURN_TEMP_CLOSE,
     DOMAIN,
@@ -79,6 +89,12 @@ def get_trv_schema() -> vol.Schema:
                     min=0, max=2.0, step=0.1, unit_of_measurement="°C", mode="box"
                 )
             ),
+            vol.Optional(
+                CONF_NIGHT_SAVING_ENABLED, default=DEFAULT_NIGHT_SAVING_ENABLED
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                "configure_schedule", default=False
+            ): selector.BooleanSelector(),
         }
     )
 
@@ -127,6 +143,10 @@ def get_trv_schema_multi() -> vol.Schema:
                 min=0, max=2.0, step=0.1, unit_of_measurement="°C", mode="box"
             )
         ),
+        vol.Optional(
+            CONF_NIGHT_SAVING_ENABLED, default=DEFAULT_NIGHT_SAVING_ENABLED
+        ): selector.BooleanSelector(),
+        vol.Optional("configure_schedule", default=False): selector.BooleanSelector(),
     }
 
     # Add "add another TRV" option dynamically
@@ -209,12 +229,20 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_PID_ANTICIPATORY_OFFSET: user_input.get(
                     CONF_PID_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
                 ),
+                CONF_NIGHT_SAVING_ENABLED: user_input.get(
+                    CONF_NIGHT_SAVING_ENABLED, DEFAULT_NIGHT_SAVING_ENABLED
+                ),
+                CONF_NIGHT_SCHEDULE: DEFAULT_NIGHT_SCHEDULE.copy(),
             }
             self._trvs.append(trv_data)
 
             # Check if user wants to add more TRVs
             if user_input.get("add_another", False):
                 return await self.async_step_trv_setup()
+
+            # Check if user wants to configure weekly schedule
+            if user_input.get("configure_schedule", False):
+                return await self.async_step_weekly_schedule()
 
             # At least one TRV is required
             if not self._trvs:
@@ -252,6 +280,85 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "trv_text": trv_text,
                 "trv_count": str(trv_count + 1),
             },
+        )
+
+    async def async_step_weekly_schedule(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure weekly night saving schedule."""
+        if user_input is not None:
+            # Update the night schedule for all TRVs
+            schedule = {}
+            days = [
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday",
+                "sunday",
+            ]
+
+            for day in days:
+                schedule[day] = {
+                    "enabled": user_input.get(f"{day}_enabled", False),
+                    "start_time": user_input.get(f"{day}_start_time", "00:00"),
+                    "end_time": user_input.get(f"{day}_end_time", "06:00"),
+                    "temp_reduction": user_input.get(f"{day}_temp_reduction", -2.0),
+                }
+
+            # Update all TRVs with the new schedule
+            for trv in self._trvs:
+                trv[CONF_NIGHT_SCHEDULE] = schedule
+
+            # Create the integration entry
+            room_name = self._room_data[CONF_ROOM_NAME]
+            return self.async_create_entry(
+                title=f"{room_name} TRV Control",
+                data={
+                    **self._room_data,
+                    CONF_TRVS: self._trvs,
+                },
+            )
+
+        # Create form schema for weekly schedule
+        schema_dict = {}
+        days = [
+            ("monday", "Monday"),
+            ("tuesday", "Tuesday"),
+            ("wednesday", "Wednesday"),
+            ("thursday", "Thursday"),
+            ("friday", "Friday"),
+            ("saturday", "Saturday"),
+            ("sunday", "Sunday"),
+        ]
+
+        for day_key, day_name in days:
+            schema_dict[vol.Optional(f"{day_key}_enabled", default=False)] = (
+                selector.BooleanSelector()
+            )
+            schema_dict[vol.Optional(f"{day_key}_start_time", default="00:00")] = (
+                selector.TimeSelector()
+            )
+            schema_dict[vol.Optional(f"{day_key}_end_time", default="06:00")] = (
+                selector.TimeSelector()
+            )
+            schema_dict[vol.Optional(f"{day_key}_temp_reduction", default=-2.0)] = (
+                selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=-5.0,
+                        max=5.0,
+                        step=0.5,
+                        unit_of_measurement="°C",
+                        mode="box",
+                    )
+                )
+            )
+
+        return self.async_show_form(
+            step_id="weekly_schedule",
+            data_schema=vol.Schema(schema_dict),
+            description_placeholders={"room_name": self._room_data[CONF_ROOM_NAME]},
         )
 
     @staticmethod
@@ -318,6 +425,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 CONF_PID_ANTICIPATORY_OFFSET: user_input.get(
                     CONF_PID_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
                 ),
+                CONF_NIGHT_SAVING_ENABLED: user_input.get(
+                    CONF_NIGHT_SAVING_ENABLED, DEFAULT_NIGHT_SAVING_ENABLED
+                ),
+                CONF_NIGHT_SCHEDULE: DEFAULT_NIGHT_SCHEDULE.copy(),
             }
 
             # Add to existing TRVs
@@ -568,6 +679,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                                     mode="box",
                                 )
                             ),
+                            vol.Optional(
+                                CONF_NIGHT_SAVING_ENABLED,
+                                default=selected_trv_config.get(
+                                    CONF_NIGHT_SAVING_ENABLED,
+                                    DEFAULT_NIGHT_SAVING_ENABLED,
+                                ),
+                            ): selector.BooleanSelector(),
+                            vol.Optional(
+                                "configure_schedule", default=False
+                            ): selector.BooleanSelector(),
                         }
                     ),
                     description_placeholders={"room_name": self._room_name},
@@ -575,6 +696,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             else:
                 # This is settings update
                 selected_trv = user_input[CONF_TRV]
+                
+                # Check if user wants to configure schedule
+                if user_input.get("configure_schedule", False):
+                    # Store the selected TRV for the schedule configuration
+                    self._selected_trv_for_schedule = selected_trv
+                    return await self.async_step_edit_weekly_schedule()
 
                 # Update the TRV settings
                 updated_trvs = self._current_trvs.copy()
@@ -608,6 +735,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                                 DEFAULT_ANTICIPATORY_OFFSET,
                             ),
                         )
+                        trv[CONF_NIGHT_SAVING_ENABLED] = user_input.get(
+                            CONF_NIGHT_SAVING_ENABLED,
+                            trv.get(
+                                CONF_NIGHT_SAVING_ENABLED, DEFAULT_NIGHT_SAVING_ENABLED
+                            ),
+                        )
+                        # Ensure night schedule exists
+                        if CONF_NIGHT_SCHEDULE not in trv:
+                            trv[CONF_NIGHT_SCHEDULE] = DEFAULT_NIGHT_SCHEDULE.copy()
                         break
 
                 # Update config entry
@@ -631,6 +767,77 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     vol.Required(CONF_TRV): vol.In(trv_entity_ids),
                 }
             ),
+            description_placeholders={"room_name": self._room_name},
+        )
+
+    async def async_step_edit_weekly_schedule(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure weekly night saving schedule for a specific TRV."""
+        if user_input is not None:
+            # Update the night schedule for the selected TRV
+            schedule = {}
+            days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+            
+            for day in days:
+                schedule[day] = {
+                    "enabled": user_input.get(f"{day}_enabled", False),
+                    "start_time": user_input.get(f"{day}_start_time", "00:00"),
+                    "end_time": user_input.get(f"{day}_end_time", "06:00"),
+                    "temp_reduction": user_input.get(f"{day}_temp_reduction", -2.0),
+                }
+            
+            # Update the selected TRV with the new schedule
+            updated_trvs = self._current_trvs.copy()
+            for trv in updated_trvs:
+                if trv[CONF_TRV] == self._selected_trv_for_schedule:
+                    trv[CONF_NIGHT_SCHEDULE] = schedule
+                    break
+            
+            # Update config entry
+            self.hass.config_entries.async_update_entry(
+                self._config_entry,
+                data={**self._config_entry.data, CONF_TRVS: updated_trvs},
+            )
+            
+            # Force reload
+            await self.hass.config_entries.async_reload(self._config_entry.entry_id)
+            
+            return self.async_create_entry(title="", data={})
+
+        # Get current schedule for the selected TRV
+        current_schedule = DEFAULT_NIGHT_SCHEDULE.copy()
+        for trv in self._current_trvs:
+            if trv[CONF_TRV] == self._selected_trv_for_schedule:
+                current_schedule = trv.get(CONF_NIGHT_SCHEDULE, DEFAULT_NIGHT_SCHEDULE.copy())
+                break
+
+        # Create form schema with current values
+        schema_dict = {}
+        days = [
+            ("monday", "Monday"),
+            ("tuesday", "Tuesday"), 
+            ("wednesday", "Wednesday"),
+            ("thursday", "Thursday"),
+            ("friday", "Friday"),
+            ("saturday", "Saturday"),
+            ("sunday", "Sunday")
+        ]
+        
+        for day_key, day_name in days:
+            day_config = current_schedule.get(day_key, {"enabled": False, "start_time": "00:00", "end_time": "06:00", "temp_reduction": -2.0})
+            schema_dict[vol.Optional(f"{day_key}_enabled", default=day_config["enabled"])] = selector.BooleanSelector()
+            schema_dict[vol.Optional(f"{day_key}_start_time", default=day_config["start_time"])] = selector.TimeSelector()
+            schema_dict[vol.Optional(f"{day_key}_end_time", default=day_config["end_time"])] = selector.TimeSelector()
+            schema_dict[vol.Optional(f"{day_key}_temp_reduction", default=day_config["temp_reduction"])] = selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=-5.0, max=5.0, step=0.5, unit_of_measurement="°C", mode="box"
+                )
+            )
+
+        return self.async_show_form(
+            step_id="edit_weekly_schedule",
+            data_schema=vol.Schema(schema_dict),
             description_placeholders={"room_name": self._room_name},
         )
 

@@ -25,6 +25,8 @@
           "max_valve_position": "Maksimal ventilåbning (%)",
           "proportional_band": "Kontrol præcision (°C)",
           "pid_anticipatory_offset": "Tidlig stop offset (°C)",
+          "night_saving_enabled": "Aktiver natbesparelse",
+          "configure_schedule": "Konfigurer ugentlig plan",
           "add_another": "Tilføj endnu en TRV til dette rum"
         },
         "data_description": {
@@ -34,8 +36,48 @@
           "max_valve_position": "Maksimalt tilladte ventilåbning (0-100%)",
           "proportional_band": "Mindre værdier = mere præcis kontrol (1.5-4.0°C)",
           "pid_anticipatory_offset": "Hvor tidligt varmen reduceres før måltemperatur (0.2-0.5°C)",
+          "night_saving_enabled": "Reducer automatisk temperaturen om natten for at spare energi",
+          "configure_schedule": "Indstil forskellige natbesparelse planer for hver dag i ugen",
           "add_another": "Afkryds for at tilføje flere TRVs til dette rum (nyttigt for store rum med flere radiatorer)"
         }
+      },
+      "weekly_schedule": {
+        "title": "Konfigurer Ugentlig Natbesparelse Plan for {room_name}",
+        "description": "Indstil forskellige natbesparelse planer for hver dag i ugen. Aktiver kun de dage hvor du ønsker natbesparelse.",
+        "data": {
+          "monday_enabled": "Mandag - Aktiver",
+          "monday_start_time": "Mandag - Starttid",
+          "monday_end_time": "Mandag - Sluttid",
+          "monday_temp_reduction": "Mandag - Temperatur Reduktion (°C)",
+          "tuesday_enabled": "Tirsdag - Aktiver",
+          "tuesday_start_time": "Tirsdag - Starttid",
+          "tuesday_end_time": "Tirsdag - Sluttid",
+          "tuesday_temp_reduction": "Tirsdag - Temperatur Reduktion (°C)",
+          "wednesday_enabled": "Onsdag - Aktiver",
+          "wednesday_start_time": "Onsdag - Starttid",
+          "wednesday_end_time": "Onsdag - Sluttid",
+          "wednesday_temp_reduction": "Onsdag - Temperatur Reduktion (°C)",
+          "thursday_enabled": "Torsdag - Aktiver",
+          "thursday_start_time": "Torsdag - Starttid",
+          "thursday_end_time": "Torsdag - Sluttid",
+          "thursday_temp_reduction": "Torsdag - Temperatur Reduktion (°C)",
+          "friday_enabled": "Fredag - Aktiver",
+          "friday_start_time": "Fredag - Starttid",
+          "friday_end_time": "Fredag - Sluttid",
+          "friday_temp_reduction": "Fredag - Temperatur Reduktion (°C)",
+          "saturday_enabled": "Lørdag - Aktiver",
+          "saturday_start_time": "Lørdag - Starttid",
+          "saturday_end_time": "Lørdag - Sluttid",
+          "saturday_temp_reduction": "Lørdag - Temperatur Reduktion (°C)",
+          "sunday_enabled": "Søndag - Aktiver",
+          "sunday_start_time": "Søndag - Starttid",
+          "sunday_end_time": "Søndag - Sluttid",
+          "sunday_temp_reduction": "Søndag - Temperatur Reduktion (°C)"
+        }
+      },
+      "edit_weekly_schedule": {
+        "title": "Rediger Ugentlig Natbesparelse Plan for {room_name}",
+        "description": "Modificer natbesparelse planen for den valgte TRV. Aktiver kun de dage hvor du ønsker natbesparelse."
       }
     },
     "error": {
@@ -68,7 +110,8 @@
           "return_temp_close": "Luk ventil temperatur (°C)",
           "max_valve_position": "Maksimal ventilåbning (%)",
           "proportional_band": "Kontrol præcision (°C)",
-          "pid_anticipatory_offset": "Tidlig stop offset (°C)"
+          "pid_anticipatory_offset": "Tidlig stop offset (°C)",
+          "night_saving_enabled": "Aktiver natbesparelse"
         },
         "data_description": {
           "trv": "TRV klima entiteten der skal styres",
@@ -76,7 +119,8 @@
           "return_temp_close": "Temperatur der stopper opvarmning (forhindrer overophedning)",
           "max_valve_position": "Maksimalt tilladte ventilåbning (0-100%)",
           "proportional_band": "Mindre værdier = mere præcis kontrol (1.5-4.0°C)",
-          "pid_anticipatory_offset": "Hvor tidligt varmen reduceres før måltemperatur (0.2-0.5°C)"
+          "pid_anticipatory_offset": "Hvor tidligt varmen reduceres før måltemperatur (0.2-0.5°C)",
+          "night_saving_enabled": "Reducer automatisk temperaturen om natten for at spare energi"
         }
       },
       "edit_trv": {
@@ -87,13 +131,17 @@
           "return_temp_close": "Luk ventil temperatur (°C)",
           "max_valve_position": "Maksimal ventilåbning (%)",
           "proportional_band": "Kontrol præcision (°C)",
-          "pid_anticipatory_offset": "Tidlig stop offset (°C)"
+          "pid_anticipatory_offset": "Tidlig stop offset (°C)",
+          "night_saving_enabled": "Aktiver natbesparelse",
+          "configure_schedule": "Konfigurer ugentlig plan"
         },
         "data_description": {
           "return_temp_close": "Temperatur der stopper opvarmning (forhindrer overophedning)",
           "max_valve_position": "Maksimalt tilladte ventilåbning (0-100%)",
           "proportional_band": "Mindre værdier = mere præcis kontrol (1.5-4.0°C)",
-          "pid_anticipatory_offset": "Hvor tidligt varmen reduceres før måltemperatur (0.2-0.5°C)"
+          "pid_anticipatory_offset": "Hvor tidligt varmen reduceres før måltemperatur (0.2-0.5°C)",
+          "night_saving_enabled": "Reducer automatisk temperaturen om natten for at spare energi",
+          "configure_schedule": "Indstil forskellige natbesparelse planer for hver dag i ugen"
         }
       },
       "remove_trv": {

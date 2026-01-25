@@ -69,3 +69,40 @@ set_trv_thresholds:
           max: 100
           step: 1
           unit_of_measurement: "%"
+
+set_night_saving:
+  name: Set Night Saving
+  description: Configure night saving settings for energy efficiency
+  target:
+    entity:
+      domain: climate
+      integration: trv_control
+  fields:
+    enabled:
+      name: Enable Night Saving
+      description: Turn night saving on or off
+      required: false
+      selector:
+        boolean:
+    start_time:
+      name: Night Start Time
+      description: Time when night saving begins (HH:MM format)
+      required: false
+      selector:
+        time:
+    end_time:
+      name: Night End Time
+      description: Time when night saving ends (HH:MM format)
+      required: false
+      selector:
+        time:
+    temperature_reduction:
+      name: Temperature Reduction
+      description: How much to reduce target temperature during night (°C)
+      required: false
+      selector:
+        number:
+          min: -5.0
+          max: 5.0
+          step: 0.5
+          unit_of_measurement: "°C"

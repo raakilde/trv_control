@@ -40,6 +40,11 @@ from .const import (
     DEFAULT_ANTICIPATORY_OFFSET,
     DEFAULT_MAX_VALVE_POSITION,
     DEFAULT_MIN_VALVE_POSITION,
+    DEFAULT_NIGHT_END_TIME,
+    DEFAULT_NIGHT_SAVING_ENABLED,
+    DEFAULT_NIGHT_SCHEDULE,
+    DEFAULT_NIGHT_START_TIME,
+    DEFAULT_NIGHT_TEMP_REDUCTION,
     DEFAULT_PROPORTIONAL_BAND,
     DEFAULT_RETURN_TEMP_CLOSE,
     DEFAULT_TEMP_HISTORY_SIZE,
@@ -65,9 +70,10 @@ async def async_setup_entry(
         }
         entity = TRVClimate(config_entry, room_data)
         async_add_entities([entity])
-        
+
         # Store entity in hass.data
         from .const import DOMAIN
+
         hass.data[DOMAIN][config_entry.entry_id] = [entity]
         _LOGGER.info(
             "Climate entity created for room %s with %d TRVs",
@@ -165,6 +171,15 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                 "valve_control_active": False,
             }
 
+        # Night saving settings - now using weekly schedule
+        self._night_saving_enabled = DEFAULT_NIGHT_SAVING_ENABLED
+        self._night_schedule = DEFAULT_NIGHT_SCHEDULE.copy()
+        # Keep old single-day settings for backward compatibility
+        self._night_start_time = DEFAULT_NIGHT_START_TIME
+        self._night_end_time = DEFAULT_NIGHT_END_TIME
+        self._night_temp_reduction = DEFAULT_NIGHT_TEMP_REDUCTION
+        self._night_saving_active = False
+
         self._unsub_state_changed = None
         self._unsub_temp_update = None
 
@@ -181,6 +196,20 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     self._attr_target_temperature,
                     self._room_name,
                 )
+
+            # Restore night saving settings
+            if last_state.attributes.get("night_saving_enabled") is not None:
+                self._night_saving_enabled = last_state.attributes[
+                    "night_saving_enabled"
+                ]
+            if last_state.attributes.get("night_start_time") is not None:
+                self._night_start_time = last_state.attributes["night_start_time"]
+            if last_state.attributes.get("night_end_time") is not None:
+                self._night_end_time = last_state.attributes["night_end_time"]
+            if last_state.attributes.get("night_temp_reduction") is not None:
+                self._night_temp_reduction = last_state.attributes[
+                    "night_temp_reduction"
+                ]
 
         # Send room temperature to all TRVs every 5 minutes
         async def _async_update_trv_temperature(now=None):
@@ -531,7 +560,9 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         else:
             # Return temp allows heating - use conservative PID regulation
             room_temp = self._attr_current_temperature
-            target_temp = self._attr_target_temperature
+            target_temp = (
+                self._get_adjusted_target_temperature()
+            )  # Use night saving adjusted temperature
 
             if room_temp is not None and target_temp is not None:
                 # Calculate effective max valve position based on return temp proximity to threshold
@@ -1069,6 +1100,15 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             attrs[f"{prefix}_status"] = trv_status["status"]
             attrs[f"{prefix}_status_reason"] = trv_status["reason"]
 
+        # Add night saving attributes
+        attrs["night_saving_enabled"] = self._night_saving_enabled
+        attrs["night_start_time"] = self._night_start_time
+        attrs["night_end_time"] = self._night_end_time
+        attrs["night_temp_reduction"] = self._night_temp_reduction
+        attrs["night_saving_active"] = self._night_saving_active
+        if self._night_saving_active:
+            attrs["adjusted_target_temp"] = self._get_adjusted_target_temperature()
+
         return attrs
 
     def _format_relative_time(self, timestamp) -> str:
@@ -1099,6 +1139,89 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             days = seconds // 86400
             return f"For {days} dage siden"
 
+    def _is_night_saving_time(self) -> bool:
+        """Check if current time is within night saving hours."""
+        if not self._night_saving_enabled:
+            return False
+
+        # Get current day of week (0=Monday, 6=Sunday)
+        now = dt_util.now()
+        weekday = now.weekday()
+        day_names = [
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+        ]
+        today_name = day_names[weekday]
+
+        # Check if night saving is enabled for today
+        if (
+            today_name not in self._night_schedule
+            or not self._night_schedule[today_name]["enabled"]
+        ):
+            return False
+
+        current_time = now.time()
+        start_time = dt_util.parse_time(self._night_schedule[today_name]["start_time"])
+        end_time = dt_util.parse_time(self._night_schedule[today_name]["end_time"])
+
+        if start_time < end_time:
+            # Same day: e.g., 01:00 to 06:00
+            return start_time <= current_time <= end_time
+        else:
+            # Cross midnight: e.g., 23:00 to 07:00
+            return current_time >= start_time or current_time <= end_time
+
+    def _get_adjusted_target_temperature(self) -> float:
+        """Get the target temperature adjusted for night saving."""
+        self._night_saving_active = self._is_night_saving_time()
+
+        if self._night_saving_active:
+            # Get today's temperature reduction
+            now = dt_util.now()
+            weekday = now.weekday()
+            day_names = [
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday",
+                "sunday",
+            ]
+            today_name = day_names[weekday]
+
+            temp_reduction = self._night_schedule[today_name]["temp_reduction"]
+            adjusted = self._attr_target_temperature + temp_reduction
+            # Don't go below 5°C or above 30°C
+            return max(5.0, min(30.0, adjusted))
+        return self._attr_target_temperature
+
+    async def async_set_night_saving(
+        self,
+        enabled: bool = None,
+        start_time: str = None,
+        end_time: str = None,
+        temp_reduction: float = None,
+    ) -> None:
+        """Set night saving parameters."""
+        if enabled is not None:
+            self._night_saving_enabled = enabled
+        if start_time is not None:
+            self._night_start_time = start_time
+        if end_time is not None:
+            self._night_end_time = end_time
+        if temp_reduction is not None:
+            self._night_temp_reduction = max(-5.0, min(5.0, temp_reduction))
+
+        # Update state and trigger recalculation
+        self.async_write_ha_state()
+        await self._async_control_trvs(force_update=True)
+
     def _determine_heating_status(self) -> dict[str, str]:
         """Determine the current heating status with simplified logic."""
         # Check window first - it sets HVAC to OFF so needs priority
@@ -1109,7 +1232,9 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             return {"status": "off"}
 
         room_temp = self._attr_current_temperature
-        target_temp = self._attr_target_temperature
+        target_temp = (
+            self._get_adjusted_target_temperature()
+        )  # Use night saving adjusted temperature
 
         if room_temp is None:
             return {"status": "no_sensor"}
@@ -1117,9 +1242,12 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         if target_temp is None:
             return {"status": "no_target"}
 
-        # Check if room has reached target
+        # Check if room has reached adjusted target
         if room_temp >= target_temp:
-            return {"status": "target_reached"}
+            status = "target_reached"
+            if self._night_saving_active:
+                status += "_night_saving"
+            return {"status": status}
 
         # Room needs heating - always return heating status
         return {"status": "heating"}
@@ -1129,7 +1257,9 @@ class TRVClimate(ClimateEntity, RestoreEntity):
     ) -> dict[str, str]:
         """Determine status and reason for individual TRV with conservative control logic."""
         room_temp = self._attr_current_temperature
-        target_temp = self._attr_target_temperature
+        target_temp = (
+            self._get_adjusted_target_temperature()
+        )  # Use night saving adjusted temperature
         return_temp = trv_state["return_temp"]
         valve_position = trv_state["valve_position"]
         close_threshold = trv_config.get(
