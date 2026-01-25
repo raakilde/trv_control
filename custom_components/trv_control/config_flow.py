@@ -503,6 +503,28 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                                 CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
                             ),
                         )
+                        trv["proportional_band"] = user_input.get(
+                            "proportional_band",
+                            trv.get("proportional_band", DEFAULT_PROPORTIONAL_BAND),
+                        )
+                        trv["pid_anticipatory_offset"] = user_input.get(
+                            "pid_anticipatory_offset",
+                            trv.get(
+                                "pid_anticipatory_offset",
+                                trv.get(
+                                    CONF_ANTICIPATORY_OFFSET,
+                                    DEFAULT_ANTICIPATORY_OFFSET,
+                                ),
+                            ),
+                        )
+                        trv["min_pid_valve_position"] = user_input.get(
+                            "min_pid_valve_position",
+                            trv.get("min_pid_valve_position", 0),
+                        )
+                        trv["max_pid_valve_position"] = user_input.get(
+                            "max_pid_valve_position",
+                            trv.get("max_pid_valve_position", 100),
+                        )
                         break
 
                 self._save_rooms(rooms)
