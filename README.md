@@ -117,6 +117,110 @@ data:
   open_temp: 32.0   # °C
 ```
 
+#### Reset Performance Statistics
+Reset performance monitoring data to start fresh measurements:
+
+```yaml
+service: trv_control.reset_performance_stats
+target:
+  entity_id: climate.living_room_trv_control
+```
+
+## Performance Monitoring
+
+TRV Control includes comprehensive performance monitoring to help you optimize your heating system and ensure it's working effectively.
+
+### Performance Metrics
+
+Each climate entity provides detailed performance attributes:
+
+```yaml
+# Performance monitoring attributes
+performance_efficiency_score: 92.5      # Overall efficiency (0-120%)
+performance_temperature_accuracy: 85.2  # Temperature control accuracy %
+performance_control_stability: 89.1     # Control stability score %
+performance_runtime_hours: 48.3         # Total runtime hours
+performance_total_actions: 156          # Total control actions
+performance_valve_adjustments: 89       # Number of valve adjustments
+performance_actions_per_hour: 3.2       # Control actions per hour
+performance_avg_temp_deviation: 1.2°C   # Average temperature deviation
+performance_max_temp_deviation: 2.8°C   # Maximum temperature deviation
+performance_night_saving_uses: 12       # Times night saving activated
+performance_window_events: 3            # Window open events detected
+```
+
+### Performance Sensors
+
+Dedicated sensors are created for monitoring:
+- **Efficiency Score**: `sensor.{room}_performance_efficiency_score`
+- **Temperature Accuracy**: `sensor.{room}_temperature_accuracy`
+- **Control Stability**: `sensor.{room}_control_stability`
+- **Control Actions**: `sensor.{room}_control_actions`
+- **Runtime Hours**: `sensor.{room}_runtime_hours`
+
+### Understanding Performance Metrics
+
+#### Efficiency Score (0-120%)
+- **90%+**: Excellent performance - system is working optimally
+- **70-89%**: Good performance - minor optimizations possible
+- **<70%**: Poor performance - check configuration and sensors
+
+Factors affecting efficiency:
+- Temperature accuracy (50% weight)
+- Control stability (30% weight)
+- Energy saving features usage (20% bonus)
+
+#### Temperature Accuracy (0-100%)
+- **85%+**: Very accurate control (typically ±1°C)
+- **70-84%**: Acceptable accuracy (±1-2°C)
+- **<70%**: Poor accuracy - check sensors and thresholds
+
+Calculated from temperature deviations over time.
+
+#### Control Stability (0-100%)
+- **90%+**: Stable control with minimal adjustments
+- **70-89%**: Moderately stable control
+- **<70%**: Unstable - frequent valve adjustments
+
+Ideal: 1-4 valve adjustments per hour. >10/hour indicates instability.
+
+### Performance Dashboard
+
+Use the provided dashboard card (`www/performance-dashboard.yaml`) to create a comprehensive monitoring dashboard:
+
+1. Copy the card configuration
+2. Add to your Lovelace dashboard
+3. Update entity names to match your rooms
+4. Monitor real-time performance metrics
+
+### Optimization Tips
+
+**Improve Efficiency Score:**
+- Enable night saving features
+- Ensure proper sensor placement
+- Check return temperature thresholds
+- Monitor for window sensor functionality
+
+**Improve Temperature Accuracy:**
+- Verify temperature sensor placement (away from heat sources)
+- Check return temperature close/open thresholds
+- Ensure TRV isn't fighting external factors
+
+**Improve Control Stability:**
+- Adjust proportional band settings
+- Review valve position limits
+- Check for sensor noise or interference
+- Consider TRV placement and radiator size
+
+### Performance History
+
+Performance statistics accumulate over time. Use the reset service to:
+- Start fresh after configuration changes
+- Begin new monitoring periods
+- Clear statistics after system maintenance
+
+Statistics reset automatically preserve current settings while clearing historical data.
+
 ## How It Works
 
 ### Temperature Control

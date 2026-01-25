@@ -67,3 +67,4 @@ DEFAULT_NIGHT_SCHEDULE = {
 # Services
 SERVICE_SET_VALVE_POSITION = "set_valve_position"
 SERVICE_SET_TRV_THRESHOLDS = "set_trv_thresholds"
+SERVICE_RESET_PERFORMANCE_STATS = "reset_performance_stats"

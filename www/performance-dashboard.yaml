@@ -1,0 +1,97 @@
+<!-- TRV Control Performance Monitoring Dashboard Card Example -->
+<!-- Copy this to your Lovelace dashboard to monitor TRV performance -->
+
+type: vertical-stack
+cards:
+  - type: horizontal-stack
+    cards:
+      - type: statistic
+        entity: sensor.living_room_performance_efficiency_score
+        name: Efficiency Score
+        stat_type: state
+      - type: statistic
+        entity: sensor.living_room_temperature_accuracy
+        name: Temperature Accuracy
+        stat_type: state
+      - type: statistic
+        entity: sensor.living_room_control_stability
+        name: Control Stability
+        stat_type: state
+
+  - type: horizontal-stack
+    cards:
+      - type: statistic
+        entity: sensor.living_room_control_actions
+        name: Total Actions
+        stat_type: state
+      - type: statistic
+        entity: sensor.living_room_runtime_hours
+        name: Runtime Hours
+        stat_type: state
+
+  - type: entities
+    title: Performance Details
+    show_header_toggle: false
+    entities:
+      - entity: climate.living_room_trv_control
+        name: Main Control
+        secondary_info: last-changed
+      - type: section
+        label: Performance Metrics
+      - entity: climate.living_room_trv_control
+        name: Efficiency Score
+        attribute: performance_efficiency_score
+        suffix: "%"
+      - entity: climate.living_room_trv_control
+        name: Temperature Accuracy
+        attribute: performance_temperature_accuracy
+      - entity: climate.living_room_trv_control
+        name: Control Stability
+        attribute: performance_control_stability
+      - entity: climate.living_room_trv_control
+        name: Actions per Hour
+        attribute: performance_actions_per_hour
+      - entity: climate.living_room_trv_control
+        name: Max Temperature Deviation
+        attribute: performance_max_temp_deviation
+      - entity: climate.living_room_trv_control
+        name: Night Saving Uses
+        attribute: performance_night_saving_uses
+      - entity: climate.living_room_trv_control
+        name: Window Events
+        attribute: performance_window_events
+
+  - type: button
+    name: Reset Performance Stats
+    icon: mdi:restart
+    tap_action:
+      action: call-service
+      service: trv_control.reset_performance_stats
+      target:
+        entity_id: climate.living_room_trv_control
+
+  - type: markdown
+    content: |
+      ## TRV Control Performance Guide
+
+      **Efficiency Score**: Overall performance rating (0-120%)
+      - 90%+: Excellent performance
+      - 70-89%: Good performance 
+      - <70%: May need tuning
+
+      **Temperature Accuracy**: How close temperatures stay to target
+      - 85%+: Very accurate (±1°C typically)
+      - 70-84%: Acceptable accuracy
+      - <70%: Poor accuracy - check sensors and thresholds
+
+      **Control Stability**: Measures control smoothness
+      - 90%+: Stable, few adjustments needed
+      - 70-89%: Moderately stable
+      - <70%: Unstable - frequent valve adjustments
+
+      **Actions per Hour**: Number of control decisions per hour
+      - 1-4: Ideal range
+      - 5-10: Acceptable but watch stability
+      - 10+: Too frequent - may indicate issues
+
+      Use **Reset Performance Stats** to start fresh monitoring.

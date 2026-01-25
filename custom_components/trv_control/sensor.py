@@ -118,6 +118,12 @@ async def async_setup_entry(
                 ControlEfficiencySensor(climate_entity, base_name),
                 TemperatureTrendSensor(climate_entity, base_name),
                 ReturnTempDeltaSensor(climate_entity, base_name),
+                # Performance monitoring sensors
+                PerformanceEfficiencySensor(climate_entity, base_name),
+                PerformanceAccuracySensor(climate_entity, base_name),
+                PerformanceStabilitySensor(climate_entity, base_name),
+                PerformanceActionsSensor(climate_entity, base_name),
+                PerformanceRuntimeSensor(climate_entity, base_name),
             ]
         )
 
@@ -714,5 +720,221 @@ class TRVHealthSensor(TRVControlSensorBase):
                 "valve_control_active": state.get("valve_control_active"),
                 "status": state.get("status"),
                 "status_reason": state.get("status_reason"),
+            }
+        return {}
+
+
+class PerformanceEfficiencySensor(SensorEntity):
+    """Sensor for TRV control efficiency score."""
+
+    def __init__(self, climate_entity: Any, base_name: str) -> None:
+        """Initialize the sensor."""
+        self._climate_entity = climate_entity
+        self._attr_name = f"{base_name} Performance Efficiency Score"
+        self._attr_unique_id = f"trv_control_{base_name}_performance_efficiency".lower().replace(" ", "_")
+        self._attr_device_class = None
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "%"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the efficiency score."""
+        if hasattr(self._climate_entity, '_performance_stats'):
+            return self._climate_entity._performance_stats.get("efficiency_score")
+        return None
+
+    @property
+    def icon(self) -> str:
+        """Return icon based on efficiency."""
+        score = self.native_value
+        if score is None:
+            return "mdi:speedometer"
+        elif score >= 90:
+            return "mdi:speedometer"
+        elif score >= 70:
+            return "mdi:speedometer-medium"
+        else:
+            return "mdi:speedometer-slow"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional attributes."""
+        if hasattr(self._climate_entity, '_performance_stats'):
+            stats = self._climate_entity._performance_stats
+            return {
+                "total_actions": stats.get("total_control_actions", 0),
+                "valve_adjustments": stats.get("valve_adjustments", 0),
+                "night_saving_uses": stats.get("night_saving_activations", 0),
+                "window_events": stats.get("window_open_events", 0),
+            }
+        return {}
+
+
+class PerformanceAccuracySensor(SensorEntity):
+    """Sensor for temperature control accuracy."""
+
+    def __init__(self, climate_entity: Any, base_name: str) -> None:
+        """Initialize the sensor."""
+        self._climate_entity = climate_entity
+        self._attr_name = f"{base_name} Temperature Accuracy"
+        self._attr_unique_id = f"trv_control_{base_name}_temperature_accuracy".lower().replace(" ", "_")
+        self._attr_device_class = None
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "%"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the temperature accuracy percentage."""
+        if hasattr(self._climate_entity, '_performance_stats'):
+            return self._climate_entity._performance_stats.get("avg_temp_accuracy")
+        return None
+
+    @property
+    def icon(self) -> str:
+        """Return icon based on accuracy."""
+        accuracy = self.native_value
+        if accuracy is None:
+            return "mdi:target"
+        elif accuracy >= 85:
+            return "mdi:target"
+        elif accuracy >= 70:
+            return "mdi:target-variant"
+        else:
+            return "mdi:crosshairs-question"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional attributes."""
+        if hasattr(self._climate_entity, '_performance_stats'):
+            stats = self._climate_entity._performance_stats
+            temp_devs = stats.get("temp_deviations", [])
+            return {
+                "max_temp_deviation": f"{stats.get('max_temp_deviation', 0):.2f}°C",
+                "avg_temp_deviation": f"{sum(temp_devs) / len(temp_devs):.2f}°C" if temp_devs else "N/A",
+                "deviation_samples": len(temp_devs),
+            }
+        return {}
+
+
+class PerformanceStabilitySensor(SensorEntity):
+    """Sensor for control stability score."""
+
+    def __init__(self, climate_entity: Any, base_name: str) -> None:
+        """Initialize the sensor."""
+        self._climate_entity = climate_entity
+        self._attr_name = f"{base_name} Control Stability"
+        self._attr_unique_id = f"trv_control_{base_name}_control_stability".lower().replace(" ", "_")
+        self._attr_device_class = None
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "%"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the control stability score."""
+        if hasattr(self._climate_entity, '_performance_stats'):
+            return self._climate_entity._performance_stats.get("control_stability")
+        return None
+
+    @property
+    def icon(self) -> str:
+        """Return icon based on stability."""
+        stability = self.native_value
+        if stability is None:
+            return "mdi:sine-wave"
+        elif stability >= 90:
+            return "mdi:chart-line"
+        elif stability >= 70:
+            return "mdi:chart-line-variant"
+        else:
+            return "mdi:sine-wave"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional attributes."""
+        if hasattr(self._climate_entity, '_performance_stats'):
+            stats = self._climate_entity._performance_stats
+            from homeassistant.util import dt as dt_util
+            runtime_hours = (dt_util.now() - stats.get("start_time")).total_seconds() / 3600
+            return {
+                "adjustments_per_hour": f"{stats.get('valve_adjustments', 0) / max(1, runtime_hours):.1f}" if runtime_hours > 1 else "N/A",
+                "total_valve_adjustments": stats.get("valve_adjustments", 0),
+                "runtime_hours": f"{runtime_hours:.1f}",
+            }
+        return {}
+
+
+class PerformanceActionsSensor(SensorEntity):
+    """Sensor for total control actions."""
+
+    def __init__(self, climate_entity: Any, base_name: str) -> None:
+        """Initialize the sensor."""
+        self._climate_entity = climate_entity
+        self._attr_name = f"{base_name} Control Actions"
+        self._attr_unique_id = f"trv_control_{base_name}_control_actions".lower().replace(" ", "_")
+        self._attr_device_class = None
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the total number of control actions."""
+        if hasattr(self._climate_entity, '_performance_stats'):
+            return self._climate_entity._performance_stats.get("total_control_actions", 0)
+        return None
+
+    @property
+    def icon(self) -> str:
+        """Return icon."""
+        return "mdi:counter"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional attributes."""
+        if hasattr(self._climate_entity, '_performance_stats'):
+            stats = self._climate_entity._performance_stats
+            return {
+                "valve_adjustments": stats.get("valve_adjustments", 0),
+                "heating_changes": stats.get("heating_status_changes", 0),
+                "last_action": stats.get("last_control_action"),
+            }
+        return {}
+
+
+class PerformanceRuntimeSensor(SensorEntity):
+    """Sensor for total runtime hours."""
+
+    def __init__(self, climate_entity: Any, base_name: str) -> None:
+        """Initialize the sensor."""
+        self._climate_entity = climate_entity
+        self._attr_name = f"{base_name} Runtime Hours"
+        self._attr_unique_id = f"trv_control_{base_name}_runtime_hours".lower().replace(" ", "_")
+        self._attr_device_class = SensorDeviceClass.DURATION
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        self._attr_native_unit_of_measurement = "h"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the runtime in hours."""
+        if hasattr(self._climate_entity, '_performance_stats'):
+            from homeassistant.util import dt as dt_util
+            start_time = self._climate_entity._performance_stats.get("start_time")
+            if start_time:
+                return (dt_util.now() - start_time).total_seconds() / 3600
+        return None
+
+    @property
+    def icon(self) -> str:
+        """Return icon."""
+        return "mdi:clock-outline"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional attributes."""
+        if hasattr(self._climate_entity, '_performance_stats'):
+            stats = self._climate_entity._performance_stats
+            runtime = self.native_value
+            return {
+                "start_time": stats.get("start_time"),
+                "actions_per_hour": f"{stats.get('total_control_actions', 0) / max(1, runtime or 1):.1f}" if runtime and runtime > 1 else "N/A",
+                "energy_saved_activations": stats.get("night_saving_activations", 0),
             }
         return {}

@@ -24,6 +24,15 @@ set_valve_position:
           step: 1
           unit_of_measurement: "%"
 
+reset_performance_stats:
+  name: Reset Performance Statistics
+  description: Reset performance monitoring statistics for TRV control
+  target:
+    entity:
+      domain: climate
+      integration: trv_control
+  fields: {}
+
 set_trv_thresholds:
   name: Set TRV Thresholds
   description: Set return temperature thresholds and max valve position for a specific TRV

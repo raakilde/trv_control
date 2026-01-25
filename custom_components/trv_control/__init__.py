@@ -13,6 +13,7 @@ from .const import (
     DOMAIN,
     SERVICE_SET_VALVE_POSITION,
     SERVICE_SET_TRV_THRESHOLDS,
+    SERVICE_RESET_PERFORMANCE_STATS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -119,6 +120,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 return
         
         _LOGGER.error("No matching climate entity found in %s", entity_ids)
+    
+    async def async_reset_performance_stats(call):
+        """Handle reset performance statistics service."""
+        # Get target entity from service call data
+        entity_ids = call.data.get("entity_id")
+        if not entity_ids:
+            entity_ids = call.context.target_list if hasattr(call.context, 'target_list') else []
+        if not entity_ids:
+            _LOGGER.error("No target entity specified")
+            return
+        
+        # Ensure entity_ids is a list
+        if isinstance(entity_ids, str):
+            entity_ids = [entity_ids]
+        
+        # Find the climate entity using component helper
+        component = hass.data.get("entity_components", {}).get("climate")
+        if not component:
+            _LOGGER.error("Climate component not found")
+            return
+        
+        for entity_id in entity_ids:
+            entity = component.get_entity(entity_id)
+            if entity and hasattr(entity, "async_reset_performance_stats"):
+                await entity.async_reset_performance_stats()
+                _LOGGER.info("Reset performance statistics for %s", entity_id)
+                return
+        
+        _LOGGER.error("No matching climate entity found in %s", entity_ids)
 
     # Register services
     hass.services.async_register(
@@ -133,6 +163,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         SERVICE_SET_TRV_THRESHOLDS,
         async_set_trv_thresholds,
         schema=SET_TRV_THRESHOLDS_SCHEMA,
+    )
+    
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RESET_PERFORMANCE_STATS,
+        async_reset_performance_stats,
     )
 
     return True

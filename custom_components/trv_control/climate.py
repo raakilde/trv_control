@@ -180,6 +180,27 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         self._night_temp_reduction = DEFAULT_NIGHT_TEMP_REDUCTION
         self._night_saving_active = False
 
+        # Performance monitoring
+        self._performance_stats = {
+            "start_time": dt_util.now(),
+            "total_control_actions": 0,
+            "total_heating_time_seconds": 0,
+            "total_energy_saved_hours": 0,
+            "temp_deviations": [],
+            "control_response_times": [],
+            "valve_adjustments": 0,
+            "night_saving_activations": 0,
+            "window_open_events": 0,
+            "last_control_action": None,
+            "last_deviation_check": None,
+            "heating_status_changes": 0,
+            "avg_temp_accuracy": None,
+            "max_temp_deviation": 0,
+            "efficiency_score": 100.0,
+            "control_stability": 100.0
+        }
+        self._performance_history_size = 100  # Keep last 100 measurements
+        
         self._unsub_state_changed = None
         self._unsub_temp_update = None
 
@@ -292,6 +313,11 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                         self._update_temperature_history(
                             new_temp, new_state.last_updated
                         )
+                        
+                        # Track temperature deviation for performance monitoring
+                        if self._attr_target_temperature:
+                            temp_deviation = new_temp - self._attr_target_temperature
+                            self._update_performance_stats(action_type=None, temp_deviation=temp_deviation)
 
                         # Send updated room temperature to all TRVs
                         self.hass.async_create_task(
@@ -328,7 +354,12 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             # Handle window sensor
             if entity_id == self._window_sensor_id:
                 window_state = new_state.state
+                old_window_state = self._window_open
                 self._window_open = window_state in ["on", "open", "true", True]
+                
+                # Track window open events for performance monitoring
+                if self._window_open and not old_window_state:
+                    self._update_performance_stats("window_open")
 
                 if self._window_open:
                     _LOGGER.info(
@@ -398,6 +429,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             if window_state := self.hass.states.get(self._window_sensor_id):
                 self._window_open = window_state.state in ["on", "open", "true", True]
                 if self._window_open:
+                    self._update_performance_stats("window_open")
                     _LOGGER.info("Initial window state is open for %s", self._attr_name)
                     self._saved_hvac_mode = self._attr_hvac_mode
                     self._attr_hvac_mode = HVACMode.OFF
@@ -551,6 +583,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             if trv_state["valve_position"] != 0:
                 await self._async_set_valve_position(trv_id, 0)
                 trv_state["valve_control_active"] = True
+                self._update_performance_stats("valve_adjustment")
                 _LOGGER.info(
                     "Return temp %.1f >= %.1f°C, stopping heating for TRV %s",
                     return_temp,
@@ -611,6 +644,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                 if trv_state["valve_position"] != desired_position:
                     await self._async_set_valve_position(trv_id, desired_position)
                     trv_state["valve_control_active"] = True
+                    self._update_performance_stats("valve_adjustment")
                     _LOGGER.info(
                         "Return temp %.1f < %.1f°C, PID control set valve to %d%% (max %d%%) for TRV %s",
                         return_temp,
@@ -638,6 +672,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                 if trv_state["valve_position"] != conservative_position:
                     await self._async_set_valve_position(trv_id, conservative_position)
                     trv_state["valve_control_active"] = True
+                    self._update_performance_stats("valve_adjustment")
                     _LOGGER.info(
                         "Return temp %.1f < %.1f°C, no room temp - using conservative valve %d%% for TRV %s",
                         return_temp,
@@ -951,7 +986,13 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
 
+        old_target = self._attr_target_temperature
         self._attr_target_temperature = temperature
+        
+        # Track temperature control action
+        if old_target and self._attr_current_temperature:
+            temp_deviation = self._attr_current_temperature - temperature
+            self._update_performance_stats("control_action", temp_deviation)
 
         # Trigger valve control for all TRVs to re-evaluate with new target
         # Valve control will send appropriate setpoint (5°C or 35°C) based on logic
@@ -1108,9 +1149,180 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         attrs["night_saving_active"] = self._night_saving_active
         if self._night_saving_active:
             attrs["adjusted_target_temp"] = self._get_adjusted_target_temperature()
-
+        
+        # Add performance monitoring attributes
+        perf_summary = self._get_performance_summary()
+        attrs["performance_efficiency_score"] = perf_summary["efficiency_score"]
+        attrs["performance_runtime_hours"] = perf_summary["runtime_hours"]
+        attrs["performance_temperature_accuracy"] = perf_summary["temperature_accuracy"]
+        attrs["performance_control_stability"] = perf_summary["control_stability"]
+        attrs["performance_total_actions"] = perf_summary["total_actions"]
+        attrs["performance_valve_adjustments"] = perf_summary["valve_adjustments"]
+        
+        if "actions_per_hour" in perf_summary:
+            attrs["performance_actions_per_hour"] = perf_summary["actions_per_hour"]
+        if "adjustments_per_hour" in perf_summary:
+            attrs["performance_adjustments_per_hour"] = perf_summary["adjustments_per_hour"]
+        if "avg_temp_deviation" in perf_summary:
+            attrs["performance_avg_temp_deviation"] = perf_summary["avg_temp_deviation"]
+        if "max_temp_deviation" in perf_summary:
+            attrs["performance_max_temp_deviation"] = perf_summary["max_temp_deviation"]
+        if "avg_response_time" in perf_summary:
+            attrs["performance_avg_response_time"] = perf_summary["avg_response_time"]
+        
+        # Add raw performance stats for advanced monitoring
+        attrs["performance_night_saving_uses"] = self._performance_stats["night_saving_activations"]
+        attrs["performance_window_events"] = self._performance_stats["window_open_events"]
+        attrs["performance_heating_changes"] = self._performance_stats["heating_status_changes"]
+        
         return attrs
 
+    async def async_reset_performance_stats(self) -> None:
+        """Reset performance monitoring statistics."""
+        from homeassistant.util import dt as dt_util
+        
+        _LOGGER.info("Resetting performance statistics for %s", self._attr_name)
+        
+        self._performance_stats = {
+            "start_time": dt_util.now(),
+            "total_control_actions": 0,
+            "total_heating_time_seconds": 0,
+            "total_energy_saved_hours": 0,
+            "temp_deviations": [],
+            "control_response_times": [],
+            "valve_adjustments": 0,
+            "night_saving_activations": 0,
+            "window_open_events": 0,
+            "last_control_action": None,
+            "last_deviation_check": None,
+            "heating_status_changes": 0,
+            "avg_temp_accuracy": None,
+            "max_temp_deviation": 0,
+            "efficiency_score": 100.0,
+            "control_stability": 100.0
+        }
+        
+        # Trigger state update to reflect reset statistics
+        self.async_write_ha_state()
+
+    def _update_performance_stats(self, action_type: str = None, temp_deviation: float = None) -> None:
+        """Update performance statistics for monitoring."""
+        now = dt_util.now()
+        stats = self._performance_stats
+        
+        if action_type == "control_action":
+            stats["total_control_actions"] += 1
+            stats["last_control_action"] = now
+            
+            # Track response time if we have current and target temps
+            if (self._attr_current_temperature and self._attr_target_temperature and
+                temp_deviation is not None):
+                response_time = abs(temp_deviation) * 60  # Rough estimate: 1°C = 60min response
+                stats["control_response_times"].append(response_time)
+                if len(stats["control_response_times"]) > self._performance_history_size:
+                    stats["control_response_times"].pop(0)
+        
+        elif action_type == "valve_adjustment":
+            stats["valve_adjustments"] += 1
+            
+        elif action_type == "night_saving_activation":
+            stats["night_saving_activations"] += 1
+            
+        elif action_type == "window_open":
+            stats["window_open_events"] += 1
+            
+        elif action_type == "heating_status_change":
+            stats["heating_status_changes"] += 1
+        
+        # Update temperature deviation tracking
+        if (temp_deviation is not None and 
+            self._attr_current_temperature is not None and 
+            self._attr_target_temperature is not None):
+            
+            deviation = abs(temp_deviation)
+            stats["temp_deviations"].append(deviation)
+            if len(stats["temp_deviations"]) > self._performance_history_size:
+                stats["temp_deviations"].pop(0)
+            
+            # Update max deviation
+            if deviation > stats["max_temp_deviation"]:
+                stats["max_temp_deviation"] = deviation
+            
+            # Calculate average accuracy (smaller deviation = better accuracy)
+            if stats["temp_deviations"]:
+                avg_deviation = sum(stats["temp_deviations"]) / len(stats["temp_deviations"])
+                # Convert to accuracy percentage (0°C deviation = 100%, 5°C deviation = 0%)
+                stats["avg_temp_accuracy"] = max(0, 100 - (avg_deviation * 20))
+        
+        # Calculate efficiency score based on multiple factors
+        self._calculate_efficiency_score()
+        
+        stats["last_deviation_check"] = now
+    
+    def _calculate_efficiency_score(self) -> None:
+        """Calculate overall control efficiency score."""
+        stats = self._performance_stats
+        score = 100.0
+        
+        # Temperature accuracy factor (50% weight)
+        if stats["avg_temp_accuracy"] is not None:
+            score = score * 0.5 + stats["avg_temp_accuracy"] * 0.5
+        
+        # Control stability factor (30% weight) - fewer adjustments = more stable
+        runtime_hours = (dt_util.now() - stats["start_time"]).total_seconds() / 3600
+        if runtime_hours > 1:  # Only calculate after 1 hour of operation
+            adjustments_per_hour = stats["valve_adjustments"] / runtime_hours
+            # Ideal: 1-4 adjustments per hour = 100%, >10 = significant penalty
+            if adjustments_per_hour <= 4:
+                stability_factor = 100
+            elif adjustments_per_hour <= 10:
+                stability_factor = 100 - ((adjustments_per_hour - 4) * 10)
+            else:
+                stability_factor = max(20, 100 - adjustments_per_hour * 5)
+            
+            stats["control_stability"] = stability_factor
+            score = score * 0.7 + stability_factor * 0.3
+        
+        # Energy saving bonus (20% weight)
+        if stats["night_saving_activations"] > 0 and runtime_hours > 24:
+            # Bonus for using night saving features
+            nights_possible = max(1, runtime_hours / 24)
+            night_saving_ratio = min(1.0, stats["night_saving_activations"] / nights_possible)
+            energy_bonus = night_saving_ratio * 20  # Up to 20 point bonus
+            score = min(120, score + energy_bonus)  # Cap at 120%
+        
+        stats["efficiency_score"] = round(score, 1)
+    
+    def _get_performance_summary(self) -> dict:
+        """Get human-readable performance summary."""
+        stats = self._performance_stats
+        now = dt_util.now()
+        runtime_hours = (now - stats["start_time"]).total_seconds() / 3600
+        
+        summary = {
+            "runtime_hours": round(runtime_hours, 1),
+            "efficiency_score": stats["efficiency_score"],
+            "temperature_accuracy": f"{stats['avg_temp_accuracy']:.1f}%" if stats["avg_temp_accuracy"] else "N/A",
+            "control_stability": f"{stats['control_stability']:.1f}%",
+            "total_actions": stats["total_control_actions"],
+            "valve_adjustments": stats["valve_adjustments"],
+        }
+        
+        if runtime_hours > 1:
+            summary["actions_per_hour"] = round(stats["total_control_actions"] / runtime_hours, 1)
+            summary["adjustments_per_hour"] = round(stats["valve_adjustments"] / runtime_hours, 1)
+        
+        if stats["temp_deviations"]:
+            avg_dev = sum(stats["temp_deviations"]) / len(stats["temp_deviations"])
+            summary["avg_temp_deviation"] = f"{avg_dev:.2f}°C"
+            summary["max_temp_deviation"] = f"{stats['max_temp_deviation']:.2f}°C"
+        
+        if stats["control_response_times"]:
+            avg_response = sum(stats["control_response_times"]) / len(stats["control_response_times"])
+            summary["avg_response_time"] = f"{avg_response:.0f} min"
+        
+        return summary
+    
     def _format_relative_time(self, timestamp) -> str:
         """Format timestamp as relative time in Danish."""
         if timestamp is None:
@@ -1178,7 +1390,12 @@ class TRVClimate(ClimateEntity, RestoreEntity):
 
     def _get_adjusted_target_temperature(self) -> float:
         """Get the target temperature adjusted for night saving."""
+        old_night_saving_active = self._night_saving_active
         self._night_saving_active = self._is_night_saving_time()
+        
+        # Track night saving activation changes
+        if self._night_saving_active and not old_night_saving_active:
+            self._update_performance_stats("night_saving_activation")
 
         if self._night_saving_active:
             # Get today's temperature reduction
