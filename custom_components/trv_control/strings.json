@@ -66,8 +66,8 @@
           "anticipatory_offset": "Anticipatory Offset (°C)",
           "proportional_band": "Proportional Band (°C)",
           "pid_anticipatory_offset": "PID Anticipatory Offset (°C)",
-          "pid_valve_min_position": "Minimal ventilposition (%)",
-          "pid_valve_max_position": "Maksimal ventilposition (%)"
+          "pid_valve_min_position": "Minimum Valve Position (%)",
+          "pid_valve_max_position": "Maximum Valve Position (%)"
         },
         "data_description": {
           "return_temp": "Temperature sensor on this TRV's radiator return pipe",
@@ -92,10 +92,8 @@
           "anticipatory_offset": "Anticipatory Offset (°C)",
           "proportional_band": "Proportional Band (°C)",
           "pid_anticipatory_offset": "PID Anticipatory Offset (°C)",
-          "pid_valve_min_position": "Minimal ventilposition (%)",
-          "pid_valve_max_position": "Maksimal ventilposition (%)"
-        },
-          "max_valve_position": "Maximum Valve Position (%)"
+          "pid_valve_min_position": "Minimum Valve Position (%)",
+          "pid_valve_max_position": "Maximum Valve Position (%)"
         },
         "data_description": {
           "return_temp_close": "When return temperature reaches this, valve closes",

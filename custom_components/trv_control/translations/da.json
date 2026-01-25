@@ -62,13 +62,23 @@
           "return_temp": "Returtemperatursensor (Z2M)",
           "return_temp_close": "Returtemp for lukning af ventil (°C)",
           "return_temp_open": "Returtemp for åbning af ventil (°C)",
-          "max_valve_position": "Maksimal ventilposition (%)"
+          "max_valve_position": "Maksimal ventilposition (%)",
+          "anticipatory_offset": "Foregribende offset (°C)",
+          "proportional_band": "Proportionalt bånd (°C)",
+          "pid_anticipatory_offset": "PID foregribende offset (°C)",
+          "pid_valve_min_position": "Minimum ventilposition (%)",
+          "pid_valve_max_position": "Maksimum ventilposition (%)"
         },
         "data_description": {
           "return_temp": "Temperatursensor på denne TRVs radiator returledning",
           "return_temp_close": "Når returtemperaturen når dette, lukkes ventilen",
           "return_temp_open": "Når returtemperaturen falder til dette, åbnes ventilen",
-          "max_valve_position": "Maksimal ventilåbning i procent (0-100%)"
+          "max_valve_position": "Maksimal ventilåbning i procent (0-100%)",
+          "anticipatory_offset": "Temperatur offset til foregribelse af varmebehov",
+          "proportional_band": "Temperaturområde for proportional kontrol",
+          "pid_anticipatory_offset": "PID kontroller foregribende offset",
+          "pid_valve_min_position": "Minimum ventilposition for PID kontrol område",
+          "pid_valve_max_position": "Maksimum ventilposition for PID kontrol område"
         }
       },
       "edit_trv": {
@@ -78,12 +88,22 @@
           "trv": "TRV der skal redigeres",
           "return_temp_close": "Returtemp for lukning af ventil (°C)",
           "return_temp_open": "Returtemp for åbning af ventil (°C)",
-          "max_valve_position": "Maksimal ventilposition (%)"
+          "max_valve_position": "Maksimal ventilposition (%)",
+          "anticipatory_offset": "Foregribende offset (°C)",
+          "proportional_band": "Proportionalt bånd (°C)",
+          "pid_anticipatory_offset": "PID foregribende offset (°C)",
+          "pid_valve_min_position": "Minimum ventilposition (%)",
+          "pid_valve_max_position": "Maksimum ventilposition (%)"
         },
         "data_description": {
           "return_temp_close": "Når returtemperaturen når dette, lukkes ventilen",
           "return_temp_open": "Når returtemperaturen falder til dette, åbnes ventilen",
-          "max_valve_position": "Maksimal ventilåbning i procent (0-100%)"
+          "max_valve_position": "Maksimal ventilåbning i procent (0-100%)",
+          "anticipatory_offset": "Temperatur offset til foregribelse af varmebehov",
+          "proportional_band": "Temperaturområde for proportional kontrol",
+          "pid_anticipatory_offset": "PID kontroller foregribende offset",
+          "pid_valve_min_position": "Minimum ventilposition for PID kontrol område",
+          "pid_valve_max_position": "Maksimum ventilposition for PID kontrol område"
         }
       },
       "remove_trv": {
