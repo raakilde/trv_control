@@ -25,9 +25,8 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_ANTICIPATORY_OFFSET,
     CONF_MAX_VALVE_POSITION,
+    CONF_MIN_VALVE_POSITION,
     CONF_PID_ANTICIPATORY_OFFSET,
-    CONF_PID_VALVE_MAX_POSITION,
-    CONF_PID_VALVE_MIN_POSITION,
     CONF_PROPORTIONAL_BAND,
     CONF_RETURN_TEMP,
     CONF_RETURN_TEMP_CLOSE,
@@ -478,12 +477,12 @@ class TRVClimate(ClimateEntity, RestoreEntity):
 
         # Get configuration for this TRV (needed for failsafe)
         current_valve_position = trv_state["valve_position"]
-        min_pid_valve_position = trv_config.get(
-            CONF_PID_VALVE_MIN_POSITION, current_valve_position
+        min_valve_position = trv_config.get(
+            CONF_MIN_VALVE_POSITION, current_valve_position
         )
-        max_pid_valve_position = trv_config.get(
-            CONF_PID_VALVE_MAX_POSITION,
-            min_pid_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA,
+        max_valve_position = trv_config.get(
+            CONF_MAX_VALVE_POSITION,
+            min_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA,
         )
 
         # Failsafe: If return temp hasn't updated in 1 hour and room needs heating, force heating
@@ -502,15 +501,15 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                 and target_temp is not None
             ):
                 if room_temp < target_temp:
-                    if trv_state["valve_position"] != max_pid_valve_position:
+                    if trv_state["valve_position"] != max_valve_position:
                         _LOGGER.warning(
                             "Failsafe: Return temp for %s hasn't updated in %.0f minutes, room needs heating - forcing open to %d%%",
                             trv_id,
                             time_since_update / 60,
-                            max_pid_valve_position,
+                            max_valve_position,
                         )
                         await self._async_set_valve_position(
-                            trv_id, max_pid_valve_position
+                            trv_id, max_valve_position
                         )
                         await self._async_send_temperature_to_trv(trv_id, target_temp)
                         await self._async_nudge_trv_if_idle(trv_id, target_temp)
@@ -539,7 +538,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     trv_id,
                 )
         else:
-            # PID/proportional control within [min_pid_valve_position, max_pid_valve_position]
+            # PID/proportional control within [min_valve_position, max_valve_position]
             room_temp = self._attr_current_temperature
             target_temp = self._attr_target_temperature
             proportional_band = trv_config.get(
@@ -557,17 +556,17 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     max_pid_valve_position,
                     proportional_band,
                 )
-                # Clamp to [min_pid_valve_position, max_pid_valve_position] (unless 0)
+                # Clamp to [min_valve_position, max_valve_position] (unless 0)
                 if pid_position > 0:
                     desired_position = max(
-                        min_pid_valve_position,
-                        min(max_pid_valve_position, pid_position),
+                        min_valve_position,
+                        min(max_valve_position, pid_position),
                     )
                 else:
                     desired_position = 0
             else:
-                # If no room temp, just use max_pid_valve_position
-                desired_position = max_pid_valve_position
+                # If no room temp, just use max_valve_position
+                desired_position = max_valve_position
             if trv_state["valve_position"] != desired_position:
                 await self._async_set_valve_position(trv_id, desired_position)
                 trv_state["valve_control_active"] = True
@@ -577,8 +576,8 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                     close_threshold,
                     desired_position,
                     trv_id,
-                    min_pid_valve_position,
-                    max_pid_valve_position,
+                    min_valve_position,
+                    max_valve_position,
                 )
 
     async def _async_nudge_trv_if_idle(self, trv_id: str, target_temp: float) -> None:
@@ -1011,16 +1010,16 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                 CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
             )
 
-            # Expose PID and valve range config as attributes
-            min_pid_valve_position = trv.get(
-                CONF_PID_VALVE_MIN_POSITION, trv_state["valve_position"]
+            # Expose valve range config as attributes
+            min_valve_position = trv.get(
+                CONF_MIN_VALVE_POSITION, trv_state["valve_position"]
             )
-            max_pid_valve_position = trv.get(
-                CONF_PID_VALVE_MAX_POSITION,
-                min_pid_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA,
+            max_valve_position = trv.get(
+                CONF_MAX_VALVE_POSITION,
+                min_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA,
             )
-            attrs[f"{prefix}_min_pid_valve_position"] = min_pid_valve_position
-            attrs[f"{prefix}_max_pid_valve_position"] = max_pid_valve_position
+            attrs[f"{prefix}_min_valve_position"] = min_valve_position
+            attrs[f"{prefix}_max_valve_position"] = max_valve_position
             attrs[f"{prefix}_proportional_band"] = trv.get(
                 CONF_PROPORTIONAL_BAND, DEFAULT_PROPORTIONAL_BAND
             )

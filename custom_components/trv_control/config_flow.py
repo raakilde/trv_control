@@ -15,8 +15,7 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_ANTICIPATORY_OFFSET,
     CONF_MAX_VALVE_POSITION,
-    CONF_PID_VALVE_MAX_POSITION,
-    CONF_PID_VALVE_MIN_POSITION,
+    CONF_MIN_VALVE_POSITION,
     CONF_PID_ANTICIPATORY_OFFSET,
     CONF_PROPORTIONAL_BAND,
     CONF_RETURN_TEMP,
@@ -110,17 +109,8 @@ def get_trv_schema() -> vol.Schema:
                     min=0, max=2.0, step=0.1, unit_of_measurement="°C", mode="box"
                 )
             ),
-            vol.Required(
-                CONF_PID_VALVE_MIN_POSITION,
-                default=0,
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=0, max=100, step=1, unit_of_measurement="%"
-                )
-            ),
             vol.Optional(
-                CONF_PID_VALVE_MAX_POSITION,
-                default=100,
+                CONF_MIN_VALVE_POSITION, default=0
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=0, max=100, step=1, unit_of_measurement="%"
@@ -323,11 +313,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                             CONF_PID_ANTICIPATORY_OFFSET: user_input.get(
                                 CONF_PID_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
                             ),
-                            CONF_PID_VALVE_MIN_POSITION: user_input.get(
-                                CONF_PID_VALVE_MIN_POSITION, 0
+                            CONF_MIN_VALVE_POSITION: user_input.get(
+                                CONF_MIN_VALVE_POSITION, 0
                             ),
-                            CONF_PID_VALVE_MAX_POSITION: user_input.get(
-                                CONF_PID_VALVE_MAX_POSITION, 100
+                            CONF_MAX_VALVE_POSITION: user_input.get(
+                                CONF_MAX_VALVE_POSITION, 100
                             ),
                         }
 
@@ -466,16 +456,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                                 )
                             ),
                             vol.Optional(
-                                CONF_PID_VALVE_MIN_POSITION,
-                                default=trv.get(CONF_PID_VALVE_MIN_POSITION, 0),
+                                CONF_MIN_VALVE_POSITION,
+                                default=trv.get(CONF_MIN_VALVE_POSITION, 0),
                             ): selector.NumberSelector(
                                 selector.NumberSelectorConfig(
                                     min=0, max=100, step=1, unit_of_measurement="%"
                                 )
                             ),
                             vol.Optional(
-                                CONF_PID_VALVE_MAX_POSITION,
-                                default=trv.get(CONF_PID_VALVE_MAX_POSITION, 100),
+                                CONF_MAX_VALVE_POSITION,
+                                default=trv.get(CONF_MAX_VALVE_POSITION, 100),
                             ): selector.NumberSelector(
                                 selector.NumberSelectorConfig(
                                     min=0, max=100, step=1, unit_of_measurement="%"
@@ -539,13 +529,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                                 ),
                             ),
                         )
-                        trv[CONF_PID_VALVE_MIN_POSITION] = user_input.get(
-                            CONF_PID_VALVE_MIN_POSITION,
-                            trv.get(CONF_PID_VALVE_MIN_POSITION, 0),
+                        trv[CONF_MIN_VALVE_POSITION] = user_input.get(
+                            CONF_MIN_VALVE_POSITION,
+                            trv.get(CONF_MIN_VALVE_POSITION, 0),
                         )
-                        trv[CONF_PID_VALVE_MAX_POSITION] = user_input.get(
-                            CONF_PID_VALVE_MAX_POSITION,
-                            trv.get(CONF_PID_VALVE_MAX_POSITION, 100),
+                        trv[CONF_MAX_VALVE_POSITION] = user_input.get(
+                            CONF_MAX_VALVE_POSITION,
+                            trv.get(CONF_MAX_VALVE_POSITION, 100),
                         )
                         break
 
