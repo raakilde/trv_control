@@ -61,7 +61,6 @@
           "trv": "TRV Device (Z2M)",
           "return_temp": "Return Temperature Sensor (Z2M)",
           "return_temp_close": "Return Temp Close Valve (°C)",
-          "return_temp_open": "Return Temp Open Valve (°C)",
           "max_valve_position": "Maximum Valve Position (%)",
           "anticipatory_offset": "Anticipatory Offset (°C)",
           "proportional_band": "Proportional Band (°C)",
@@ -70,7 +69,6 @@
         "data_description": {
           "return_temp": "Temperature sensor on this TRV's radiator return pipe",
           "return_temp_close": "When return temperature reaches this, valve closes",
-          "return_temp_open": "When return temperature drops to this, valve opens",
           "max_valve_position": "Maximum valve opening percentage (0-100%)",
           "anticipatory_offset": "Temperature offset for anticipating heating needs",
           "proportional_band": "Temperature range for proportional control",
@@ -83,7 +81,6 @@
         "data": {
           "trv": "TRV to edit",
           "return_temp_close": "Return Temp Close Valve (°C)",
-          "return_temp_open": "Return Temp Open Valve (°C)",
           "max_valve_position": "Maximum Valve Position (%)",
           "anticipatory_offset": "Anticipatory Offset (°C)",
           "proportional_band": "Proportional Band (°C)",
@@ -91,7 +88,6 @@
         },
         "data_description": {
           "return_temp_close": "When return temperature reaches this, valve closes",
-          "return_temp_open": "When return temperature drops to this, valve opens",
           "max_valve_position": "Maximum valve opening percentage (0-100%)",
           "anticipatory_offset": "Temperature offset for anticipating heating needs",
           "proportional_band": "Temperature range for proportional control",

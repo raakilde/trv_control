@@ -75,13 +75,6 @@ def get_trv_schema() -> vol.Schema:
                 )
             ),
             vol.Optional(
-                CONF_RETURN_TEMP_OPEN, default=DEFAULT_RETURN_TEMP_OPEN
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=20, max=80, step=0.5, unit_of_measurement="°C"
-                )
-            ),
-            vol.Optional(
                 CONF_MAX_VALVE_POSITION, default=DEFAULT_MAX_VALVE_POSITION
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(

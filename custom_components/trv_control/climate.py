@@ -724,7 +724,10 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                         blocking=False,
                     )
                 else:
-                    _LOGGER.warning("MQTT service not available for %s", trv_id)
+                    _LOGGER.info(
+                        "TRV %s: No valve control available - number entity not found and MQTT not configured. Valve position control disabled.",
+                        trv_id,
+                    )
             except Exception as e:
                 _LOGGER.error(
                     "Could not set valve position via MQTT for %s: %s", trv_id, e
@@ -857,8 +860,8 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                         blocking=False,
                     )
                 else:
-                    _LOGGER.warning(
-                        "No number entity found for %s and MQTT not available",
+                    _LOGGER.info(
+                        "TRV %s: No external temperature control available - number entity not found and MQTT not configured. Using TRV's internal sensor.",
                         trv_id,
                     )
 
@@ -1006,8 +1009,11 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             attrs[f"{prefix}_close_threshold"] = trv.get(
                 CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE
             )
+            # Auto-calculate open threshold as close_threshold - 2°C (used during learning)
+            close_threshold = trv.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE)
+            attrs[f"{prefix}_open_threshold_auto"] = close_threshold - 2.0
             attrs[f"{prefix}_conservative_threshold"] = (
-                trv.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE) - 1.0
+                close_threshold - 1.0
             )  # Show the buffer zone threshold
             attrs[f"{prefix}_anticipatory_offset"] = trv.get(
                 CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
@@ -1120,6 +1126,7 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         # Conservative control logic with buffer zone
         temp_buffer = 1.0  # 1°C buffer zone
         conservative_threshold = close_threshold - temp_buffer
+        open_threshold_auto = close_threshold - 2.0  # Auto-calculated open threshold
 
         if return_temp >= close_threshold:
             return {
@@ -1132,17 +1139,17 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                 if room_temp >= target_temp:
                     return {
                         "status": "target_reached",
-                        "reason": f"Room {room_temp}°C ≥ target {target_temp}°C, return {return_temp}°C in buffer zone - conservative control (valve {valve_position}%)",
+                        "reason": f"Room {room_temp}°C ≥ target {target_temp}°C, return {return_temp}°C in buffer zone ({conservative_threshold:.1f}-{close_threshold}°C) - conservative control (valve {valve_position}%)",
                     }
                 else:
                     return {
                         "status": "conservative_heating",
-                        "reason": f"Room {room_temp}°C < target {target_temp}°C, return {return_temp}°C near threshold ({conservative_threshold:.1f}-{close_threshold}°C) - reduced valve (valve {valve_position}%)",
+                        "reason": f"Room {room_temp}°C < target {target_temp}°C, return {return_temp}°C near threshold (open: {open_threshold_auto:.1f}°C, close: {close_threshold}°C) - reduced valve {valve_position}%",
                     }
             else:
                 return {
                     "status": "conservative_heating",
-                    "reason": f"Return {return_temp}°C near threshold ({conservative_threshold:.1f}-{close_threshold}°C) - reduced valve {valve_position}% (no room temp)",
+                    "reason": f"Return {return_temp}°C near threshold (open: {open_threshold_auto:.1f}°C, close: {close_threshold}°C) - reduced valve {valve_position}% (no room temp)",
                 }
         else:
             # Safe zone - normal heating
@@ -1150,17 +1157,17 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                 if room_temp >= target_temp:
                     return {
                         "status": "target_reached",
-                        "reason": f"Room {room_temp}°C ≥ target {target_temp}°C, return {return_temp}°C safe - PID control (valve {valve_position}%)",
+                        "reason": f"Room {room_temp}°C ≥ target {target_temp}°C, return {return_temp}°C safe (open: {open_threshold_auto:.1f}°C, close: {close_threshold}°C) - PID control (valve {valve_position}%)",
                     }
                 else:
                     return {
                         "status": "heating",
-                        "reason": f"Room {room_temp}°C < target {target_temp}°C, return {return_temp}°C < {conservative_threshold:.1f}°C - full PID control (valve {valve_position}%)",
+                        "reason": f"Room {room_temp}°C < target {target_temp}°C, return {return_temp}°C < {open_threshold_auto:.1f}°C - full PID control (valve {valve_position}%)",
                     }
             else:
                 return {
                     "status": "heating",
-                    "reason": f"Return {return_temp}°C < {conservative_threshold:.1f}°C - conservative valve {valve_position}% (no room temp)",
+                    "reason": f"Return {return_temp}°C < {open_threshold_auto:.1f}°C - conservative valve {valve_position}% (no room temp)",
                 }
 
     async def async_set_valve_position(self, trv_entity_id: str, position: int) -> None:
