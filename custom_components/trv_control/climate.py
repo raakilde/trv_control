@@ -511,8 +511,13 @@ class TRVClimate(ClimateEntity, RestoreEntity):
         )
         # conf_a: current valve open % (if not set, use DEFAULT_MIN_VALVE_POSITION_DELTA as base)
         current_valve_position = trv_state["valve_position"]
-        min_pid_valve_position = trv_config.get("min_pid_valve_position", current_valve_position)
-        max_pid_valve_position = trv_config.get("max_pid_valve_position", min_pid_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA)
+        min_pid_valve_position = trv_config.get(
+            "min_pid_valve_position", current_valve_position
+        )
+        max_pid_valve_position = trv_config.get(
+            "max_pid_valve_position",
+            min_pid_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA,
+        )
 
         # Only control based on return temp and allowed range
         if return_temp >= close_threshold:
@@ -548,7 +553,8 @@ class TRVClimate(ClimateEntity, RestoreEntity):
                 # Clamp to [min_pid_valve_position, max_pid_valve_position] (unless 0)
                 if pid_position > 0:
                     desired_position = max(
-                        min_pid_valve_position, min(max_pid_valve_position, pid_position)
+                        min_pid_valve_position,
+                        min(max_pid_valve_position, pid_position),
                     )
                 else:
                     desired_position = 0
@@ -999,10 +1005,22 @@ class TRVClimate(ClimateEntity, RestoreEntity):
             )
 
             # Expose PID and valve range config as attributes
+            min_pid_valve_position = trv.get(
+                "min_pid_valve_position", trv_state["valve_position"]
+            )
+            max_pid_valve_position = trv.get(
+                "max_pid_valve_position",
+                min_pid_valve_position + DEFAULT_MIN_VALVE_POSITION_DELTA,
+            )
             attrs[f"{prefix}_min_pid_valve_position"] = min_pid_valve_position
             attrs[f"{prefix}_max_pid_valve_position"] = max_pid_valve_position
-            attrs[f"{prefix}_proportional_band"] = trv.get("proportional_band", DEFAULT_PROPORTIONAL_BAND)
-            attrs[f"{prefix}_pid_anticipatory_offset"] = trv.get("pid_anticipatory_offset", trv.get(CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET))
+            attrs[f"{prefix}_proportional_band"] = trv.get(
+                "proportional_band", DEFAULT_PROPORTIONAL_BAND
+            )
+            attrs[f"{prefix}_pid_anticipatory_offset"] = trv.get(
+                "pid_anticipatory_offset",
+                trv.get(CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET),
+            )
 
             # Add individual TRV status and reason
             trv_status = self._determine_trv_status_with_reason(trv, trv_state)

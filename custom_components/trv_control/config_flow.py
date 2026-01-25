@@ -89,6 +89,20 @@ def get_trv_schema() -> vol.Schema:
                     min=0, max=2.0, step=0.1, unit_of_measurement="°C", mode="box"
                 )
             ),
+            vol.Optional(
+                "proportional_band", default=DEFAULT_PROPORTIONAL_BAND
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0.5, max=10, step=0.1, unit_of_measurement="°C", mode="box"
+                )
+            ),
+            vol.Optional(
+                "pid_anticipatory_offset", default=DEFAULT_ANTICIPATORY_OFFSET
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=2.0, step=0.1, unit_of_measurement="°C", mode="box"
+                )
+            ),
         }
     )
 
@@ -268,16 +282,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         trv_config = {
                             CONF_TRV: user_input[CONF_TRV],
                             CONF_RETURN_TEMP: user_input[CONF_RETURN_TEMP],
-                            CONF_RETURN_TEMP_CLOSE: user_input.get(
+                            CONF_RETURN_TEMP_CLOSE: user.input.get(
                                 CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE
                             ),
-                            CONF_RETURN_TEMP_OPEN: user_input.get(
+                            CONF_RETURN_TEMP_OPEN: user.input.get(
                                 CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN
                             ),
-                            CONF_MAX_VALVE_POSITION: user_input.get(
+                            CONF_MAX_VALVE_POSITION: user.input.get(
                                 CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION
                             ),
-                            CONF_ANTICIPATORY_OFFSET: user_input.get(
+                            CONF_ANTICIPATORY_OFFSET: user.input.get(
                                 CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
                             ),
                         }
@@ -327,7 +341,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         # Step 1: Select which TRV to edit
         if not hasattr(self, "_selected_trv"):
             if user_input is not None:
-                self._selected_trv = user_input["trv"]
+                self._selected_trv = user.input["trv"]
                 # Find the TRV config to get current values
                 for trv in selected_room_config[CONF_TRVS]:
                     if trv[CONF_TRV] == self._selected_trv:
@@ -408,21 +422,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # Update the TRV config
                 for trv in selected_room_config[CONF_TRVS]:
                     if trv[CONF_TRV] == self._selected_trv:
-                        trv[CONF_RETURN_TEMP_CLOSE] = user_input.get(
+                        trv[CONF_RETURN_TEMP_CLOSE] = user.input.get(
                             CONF_RETURN_TEMP_CLOSE,
                             trv.get(CONF_RETURN_TEMP_CLOSE, DEFAULT_RETURN_TEMP_CLOSE),
                         )
-                        trv[CONF_RETURN_TEMP_OPEN] = user_input.get(
+                        trv[CONF_RETURN_TEMP_OPEN] = user.input.get(
                             CONF_RETURN_TEMP_OPEN,
                             trv.get(CONF_RETURN_TEMP_OPEN, DEFAULT_RETURN_TEMP_OPEN),
                         )
-                        trv[CONF_MAX_VALVE_POSITION] = user_input.get(
+                        trv[CONF_MAX_VALVE_POSITION] = user.input.get(
                             CONF_MAX_VALVE_POSITION,
                             trv.get(
                                 CONF_MAX_VALVE_POSITION, DEFAULT_MAX_VALVE_POSITION
                             ),
                         )
-                        trv[CONF_ANTICIPATORY_OFFSET] = user_input.get(
+                        trv[CONF_ANTICIPATORY_OFFSET] = user.input.get(
                             CONF_ANTICIPATORY_OFFSET,
                             trv.get(
                                 CONF_ANTICIPATORY_OFFSET, DEFAULT_ANTICIPATORY_OFFSET
@@ -466,7 +480,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_abort(reason="no_trvs")
 
         if user_input is not None:
-            trv_id = user_input["trv"]
+            trv_id = user.input["trv"]
             selected_room_config[CONF_TRVS] = [
                 trv
                 for trv in selected_room_config[CONF_TRVS]
